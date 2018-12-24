@@ -7,9 +7,13 @@ import os
 import time
 import numpy as np
 import glob
+import matplotlib
+matplotlib.use('Agg') # nodisplay
 import matplotlib.pyplot as plt
 import PIL
 import imageio
+
+
 
 # load MNIST
 (train_images, _), (test_images, _) = tf.keras.datasets.mnist.load_data()
@@ -54,6 +58,7 @@ class CVAE(tf.keras.Model):
             tf.keras.layers.Reshape(target_shape=(7, 7, 32)),
             tf.keras.layers.Conv2DTranspose(
                 filters=64,
+                kernel_size=3,
                 strides=(2, 2),
                 padding="SAME",
                 activation=tf.nn.relu),
@@ -64,7 +69,7 @@ class CVAE(tf.keras.Model):
                 padding="SAME",
                 activation=tf.nn.relu),
             tf.keras.layers.Conv2DTranspose(
-                filters=1, kernel_size=3, strides=(1, 1), padding="SAME").
+                filters=1, kernel_size=3, strides=(1, 1), padding="SAME"),
         ])
 
     def sample(self, eps=None):
@@ -102,7 +107,9 @@ def compute_loss(model, x):
 
     cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
     logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-    logpz = log_normal_pdf(z, mean, logvar)
+    logpz = log_normal_pdf(z, 0.0, 0.0) # standard normal marginal distribution
+    logqz_x = log_normal_pdf(z, mean, logvar)
+
     return -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
 def compute_gradients(model, x):
@@ -115,6 +122,52 @@ def apply_gradients(optimizer, gradients, variables, global_step=None):
     optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
 
 
+epochs = 100
+latent_dim = 50
+num_examples_to_generate = 16
 
+random_vector_for_generation = tf.random_normal(
+    shape=[num_examples_to_generate, latent_dim])
+model = CVAE(latent_dim)
+def generate_and_save_images(model, epoch, test_input):
+    predictions = model.sample(test_input)
+    fig = plt.figure(figsize=(4,4))
+    for i in range(predictions.shape[0]):
+        plt.subplot(4, 4, i+1)
+        plt.imshow(predictions[i, :, :, 0], cmap='gray')
+    plt.savefig('out/image_at_epoch_{:04d}.png'.format(epoch))
+    plt.show()
+
+generate_and_save_images(model, 0, random_vector_for_generation)
+for epoch in range(1, epochs+1):
+    start_time = time.time()
+    for train_x in train_dataset:
+        gradients, loss = compute_gradients(model, train_x)
+        apply_gradients(optimizer, gradients, model.trainable_variables)
+    end_time = time.time()
+    if epoch % 1 == 0:
+        loss = tfe.metrics.Mean()
+        for test_x in test_dataset.make_one_shot_iterator():
+            loss(compute_loss(model, test_x))
+        elbo = -loss.result()
+        print('Epoch: {}, Test set ELBO: {}, '
+                'time elapse for current epoch {}'.format(epoch, elbo, end_time - start_time))
+        generate_and_save_images(
+            model, epoch, random_vector_for_generation)
+            
+with imageio.get_writer('out/cvae.gif', mode='I') as writer:
+    filenames = glob.glob('out/image*.png')
+    filenames = sorted(filenames)
+    last = -1
+    for i, filename in enumerate(filenames):
+        frame = 2*(i**0.5)
+        if round(frame) > round(last):
+            last = frame
+        else:
+            continue
+        image = imageio.imread(filename)
+        writer.append_data(image)
+    image = imageio.imread(filename)
+    writer.append_data(image)
 
 

@@ -3,7 +3,6 @@ from tensorflow.contrib.rnn import BasicRNNCell
 
 
 def main1():
-
     cell = BasicRNNCell(2)
 
     X = tf.constant([[1.0], [2.0]])
@@ -14,6 +13,9 @@ def main1():
     writer = tf.summary.FileWriter('./debug_out')
     writer.add_graph(tf.get_default_graph())
     writer.flush()
-    pass
+
+def main2():
+    pass 
+
 
 main1()
