@@ -1,6 +1,7 @@
 #make flying object data with single objects
 import numpy as np
-
+import random
+import h5py
 
 def make_objdict():
 
@@ -68,7 +69,6 @@ def stamp_object(base, obj, cy, cx):
     pad[p+by1:p+by2+1, p+bx1:p+bx2+1] += obj
     return pad[p:p+28, p:p+28]
 
-
 def display_img(img):
     # display 28 x 28 x 1 image
     W, H = (28, 28)
@@ -84,9 +84,30 @@ def display_img(img):
         s=s+"\n"
     print(s) 
 
+def generate_single(objdict):
+    # generate single random image
+    obj = random.choice(objdict.values())
+    cy = random.randint(0,27)
+    cx = random.randint(0,27)
+    base = np.zeros((28, 28))
+    img = stamp_object(base, obj, cy, cx)
+    return img
+
+def generate_data(data_size):
+    objdict = make_objdict()
+    imgs = []
+    for i in range(data_size):
+        img = generate_single(objdict)
+        imgs.append(np.reshape(img, (28, 28, 1)))
+    data = np.array(imgs)
+    return data
 
 def main():
-    objdict = make_objdict()
-    display_img(canv)
+    data_size = 5000
+    data = generate_data(data_size)
+    print(data.shape)
+    with h5py.File('data/single/single.h5', 'w') as f:
+        f.create_dataset('features', data=data)
+
 
 main()
