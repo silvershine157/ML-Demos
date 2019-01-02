@@ -1,12 +1,11 @@
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
+import time
 
 learning_rate = 0.01
 batch_size = 128
 n_epochs = 30
-n_train = 60000
 n_test = 10000
-
 
 def main():
     # read data
@@ -39,8 +38,47 @@ def main():
         logits=logits,
         labels=label
     )
-    loss = tf.reduce_sum(cross_ent)
-    print(loss.shape)
+    loss = tf.reduce_sum(cross_ent, name='loss')
+    
+    # create optimizer
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
+
+    # calculate accuracy
+    preds = tf.nn.softmax(logits)
+    correct_preds = tf.equal(tf.argmax(preds, 1), tf.argmax(label, 1))
+    accuracy = tf.reduce_sum(tf.cast(correct_preds, tf.float32))
+
+    #writer = tf.summary.FileWriter('./graphs/logreg', tf.get_default_graph())
+    with tf.Session() as sess:
+        start_time = time.time()
+        sess.run(tf.global_variables_initializer())
+
+        # train model
+        for i in range(n_epochs):
+            sess.run(train_init) # draw training batch
+            total_loss = 0
+            n_batches = 0
+            try:
+                while True:
+                    _, l = sess.run([optimizer, loss])
+                    total_loss += l
+                    n_batches += 1
+            except tf.errors.OutOfRangeError:
+                pass
+            print('Average loss epoch {0}: {1}'.format(i, total_loss/n_batches))
+        print('Total time: {0} seconds'.format(time.time() - start_time))
+
+        # test model
+        sess.run(test_init)
+        total_correct_preds = 0
+        try:
+            while True:
+                accuracy_batch = sess.run(accuracy)
+                total_correct_preds += accuracy_batch
+        except tf.errors.OutOfRangeError:
+            pass
+        print('Accuracy {0}'.format(total_correct_preds/n_test))
+    # writer.close()
 
 
 def get_dataset():
