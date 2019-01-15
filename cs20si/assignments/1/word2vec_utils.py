@@ -68,7 +68,7 @@ def most_common_words(visual_fld, num_visualize):
 
 def batch_gen(download_url, expected_byte, vocab_size, batch_size, 
                 skip_window, visual_fld):
-    local_dest = 'data/text8.zip'
+    local_dest = '../../ws/data/text8.zip'
     utils.download_one_file(download_url, local_dest, expected_byte)
     words = read_data(local_dest)
     dictionary, _ = build_vocab(words, vocab_size, visual_fld)
