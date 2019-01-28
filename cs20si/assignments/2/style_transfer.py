@@ -41,12 +41,12 @@ class StyleTransfer(object):
         self.content_layer = 'conv4_2'
         self.style_layers = ['conv1_1', 'conv2_1', 'conv3_1', 'conv4_1', 'conv5_1']
         # content_w, style_w: corresponding weights for content loss and style loss
-        self.content_w = None
-        self.style_w = None
+        self.content_w = 1.0
+        self.style_w = 20.0
         # style_layer_w: weights for different style layers. deep layers have more weights
-        self.style_layer_w = [0.5, 1.0, 1.5, 3.0, 4.0] 
-        self.gstep = None # global step
-        self.lr = None
+        self.style_layer_w = [0.5, 1.0, 1.5, 3.0, 4.0] # given!
+        self.gstep = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step") # global step
+        self.lr = 0.01
         ###############################
 
     def create_input(self):
