@@ -54,7 +54,15 @@ class VGG(object):
         """
         ###############################
         ## TO DO
-        out = None
+        W, b = self._weights(layer_idx, layer_name)
+        conv = tf.nn.conv2d(
+            input=prev_layer,
+            filter=W,
+            strides=[1, 1, 1, 1],
+            padding="SAME",
+            name=layer_name
+        )
+        out = tf.nn.relu(conv + b)
         ###############################
         setattr(self, layer_name, out)
 
@@ -71,7 +79,13 @@ class VGG(object):
         """
         ###############################
         ## TO DO
-        out = None
+        out = tf.nn.avg_pool(
+            value=prev_layer,
+            ksize=[1, 2, 2, 1],
+            strides=[1, 2, 2, 1],
+            padding='SAME',
+            name=layer_name
+        )
         ###############################
         setattr(self, layer_name, out)
 
