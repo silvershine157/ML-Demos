@@ -94,8 +94,6 @@ class StyleTransfer(object):
         '''
         ###############################
         ## TO DO
-        print("Content representation shape:")
-        print(P.shape)
         E = tf.square(F - P)
         E = tf.reshape(E, (-1,))
         N = E.shape[0].value
@@ -125,6 +123,9 @@ class StyleTransfer(object):
         """
         ###############################
         ## TO DO
+        e = tf.reshape(a, (-1,))
+        e = tf.reduce_sum(e)
+        return e
         return None
         ###############################
 
@@ -135,7 +136,13 @@ class StyleTransfer(object):
         """
         ###############################
         ## TO DO
-        self.style_loss = None
+        losses = []
+         
+        G = [getattr(self.vgg, layer) for layer in self.style_layers]
+        for i in range(len(G)):
+            single_loss = self._single_style_loss(A[i], G[i])
+            losses.append(self.style_layer_w[i]*single_loss)
+        self.style_loss = tf.reduce_sum(losses)
         ###############################
 
     def losses(self):
@@ -155,7 +162,7 @@ class StyleTransfer(object):
             ##########################################
             ## TO DO: create total loss. 
             ## Hint: don't forget the weights for the content loss and style loss
-            self.total_loss = None
+            self.total_loss = self.style_w*self.style_loss + self.content_w*self.content_loss
             ##########################################
 
     def optimize(self):
@@ -234,4 +241,4 @@ if __name__ == '__main__':
     setup()
     machine = StyleTransfer('img_content/doge.jpg', 'img_styles/starry_night.jpg', 333, 250)
     machine.build()
-    machine.train(300)
+    #machine.train(300)
