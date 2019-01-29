@@ -173,16 +173,19 @@ class StyleTransfer(object):
     def optimize(self):
         ###############################
         ## TO DO: create optimizer
-        self.opt = None
+        self.opt = tf.train.AdamOptimizer(self.lr).minimize(self.total_loss)
         ###############################
 
     def create_summary(self):
         ###############################
         ## TO DO: create summaries for all the losses
         ## Hint: don't forget to merge them
-        self.summary_op = None
+        with tf.name_scope("summaries"):
+            tf.summary.scalar("content loss", self.content_loss)
+            tf.summary.scalar("style loss", self.style_loss)
+            tf.summary.scalar("total loss", self.total_loss)
+            self.summary_op = tf.summary.merge_all()
         ###############################
-
 
     def build(self):
         self.create_input()
