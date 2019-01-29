@@ -106,7 +106,9 @@ class StyleTransfer(object):
         """
         ###############################
         ## TO DO
-        return None
+        F = tf.reshape(F, (N, M))
+        G = tf.einsum('ik,jk->ij', F, F)
+        return G
         ###############################
 
     def _single_style_loss(self, a, g):
@@ -123,10 +125,14 @@ class StyleTransfer(object):
         """
         ###############################
         ## TO DO
-        e = tf.reshape(a, (-1,))
-        e = tf.reduce_sum(e)
-        return e
-        return None
+        dims = g.get_shape().as_list()
+        N = dims[1]*dims[2]
+        M = dims[3]
+        gramA = self._gram_matrix(a, N, M)
+        gramG = self._gram_matrix(g, N, M)
+        E = tf.reduce_sum(tf.square(gramA - gramG), [0, 1])
+        E = (1.0/(4*N*N*M*M))*E
+        return E
         ###############################
 
     def _style_loss(self, A):
@@ -136,8 +142,7 @@ class StyleTransfer(object):
         """
         ###############################
         ## TO DO
-        losses = []
-         
+        losses = []         
         G = [getattr(self.vgg, layer) for layer in self.style_layers]
         for i in range(len(G)):
             single_loss = self._single_style_loss(A[i], G[i])
