@@ -225,7 +225,7 @@ class StyleTransfer(object):
 
             initial_step = self.gstep.eval()
             
-            print("Now starting training")
+            #print("Now starting training")
             start_time = time.time()
             for index in range(initial_step, n_iters):
                 if index >= 5 and index < 20:
@@ -233,21 +233,21 @@ class StyleTransfer(object):
                 elif index >= 20:
                     skip_step = 20
              
-                print("optimizing...")
+                #print("optimizing...")
                 sess.run(self.opt)
-                print("done")
+                #print("done")
                 if (index + 1) % skip_step == 0:
                     ###############################
                     ## TO DO: obtain generated image, loss, and summary
                     #gen_image, total_loss, summary = sess.run([self.input_img, self.total_loss, self.summary_op])
                     ###############################
-                    print("gen image...")
+                    #print("gen image...")
                     gen_image = sess.run(self.input_img)
-                    print("total loss...")
+                    #print("total loss...")
                     total_loss = sess.run(self.total_loss)
-                    print("summary...")
+                    #print("summary...")
                     summary = sess.run(self.summary_op)
-                    print("done")
+                    #print("done")
                     # add back the mean pixels we subtracted before
                     gen_image = gen_image + self.vgg.mean_pixels 
                     writer.add_summary(summary, global_step=index)
@@ -270,4 +270,4 @@ if __name__ == '__main__':
     setup()
     machine = StyleTransfer('img_content/doge.jpg', 'img_styles/starry_night.jpg', 333, 250)
     machine.build()
-    #machine.train(300)
+    machine.train(300)
