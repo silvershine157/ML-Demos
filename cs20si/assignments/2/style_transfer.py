@@ -107,7 +107,7 @@ class StyleTransfer(object):
         ###############################
         ## TO DO
         F = tf.reshape(F, (N, M))
-        G = tf.einsum('ik,jk->ij', F, F)
+        G = tf.einsum('ki,kj->ij', F, F)
         return G
         ###############################
 
@@ -130,6 +130,10 @@ class StyleTransfer(object):
         M = dims[3]
         gramA = self._gram_matrix(a, N, M)
         gramG = self._gram_matrix(g, N, M)
+        #print("Gram Shape:")
+        #print(a.shape)
+        #print((N, M))
+        #print(gramA.shape)
         E = tf.reduce_sum(tf.square(gramA - gramG), [0, 1])
         E = (1.0/(4*N*N*M*M))*E
         return E
@@ -173,7 +177,7 @@ class StyleTransfer(object):
     def optimize(self):
         ###############################
         ## TO DO: create optimizer
-        self.opt = tf.train.AdamOptimizer(self.lr).minimize(self.total_loss)
+        self.opt = tf.train.AdamOptimizer(self.lr).minimize(self.total_loss, global_step=self.gstep)
         ###############################
 
     def create_summary(self):
@@ -203,7 +207,9 @@ class StyleTransfer(object):
             ## 1. initialize your variables
             ## 2. create writer to write your grapp
             ###############################
-            
+            sess.run(tf.global_variables_initializer())
+            writer = tf.summary.FileWriter('graphs/style_transfer', sess.graph)
+
             sess.run(self.input_img.assign(self.initial_img))
 
             ###############################
@@ -211,23 +217,37 @@ class StyleTransfer(object):
             ## 1. create a saver object
             ## 2. check if a checkpoint exists, restore the variables
             ##############################
+            saver = tf.train.Saver()
+            ckpt = tf.train.get_checkpoint_state(os.path.dirname('checkpoints/checkpoint'))
+            if ckpt and ckpt.model_checkpoint_path:
+                saver.restore(sess, ckpt.model_checkpoint_path)
+
 
             initial_step = self.gstep.eval()
             
+            print("Now starting training")
             start_time = time.time()
             for index in range(initial_step, n_iters):
                 if index >= 5 and index < 20:
                     skip_step = 10
                 elif index >= 20:
                     skip_step = 20
-                
+             
+                print("optimizing...")
                 sess.run(self.opt)
+                print("done")
                 if (index + 1) % skip_step == 0:
                     ###############################
                     ## TO DO: obtain generated image, loss, and summary
-                    gen_image, total_loss, summary = None, None, None
+                    #gen_image, total_loss, summary = sess.run([self.input_img, self.total_loss, self.summary_op])
                     ###############################
-                    
+                    print("gen image...")
+                    gen_image = sess.run(self.input_img)
+                    print("total loss...")
+                    total_loss = sess.run(self.total_loss)
+                    print("summary...")
+                    summary = sess.run(self.summary_op)
+                    print("done")
                     # add back the mean pixels we subtracted before
                     gen_image = gen_image + self.vgg.mean_pixels 
                     writer.add_summary(summary, global_step=index)
@@ -243,6 +263,7 @@ class StyleTransfer(object):
                         ###############################
                         ## TO DO: save the variables into a checkpoint
                         ###############################
+                        saver.save(sess, 'checkpoints/style_transfer', index)
                         pass
 
 if __name__ == '__main__':

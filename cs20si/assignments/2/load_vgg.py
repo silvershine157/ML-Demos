@@ -55,6 +55,8 @@ class VGG(object):
         ###############################
         ## TO DO
         W, b = self._weights(layer_idx, layer_name)
+        W = tf.constant(W, name="weights")
+        b = tf.constant(b, name="bias")
         conv = tf.nn.conv2d(
             input=prev_layer,
             filter=W,
