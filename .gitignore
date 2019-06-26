@@ -1,4 +1,5 @@
-cs20si/ws/data/*
-cs20si/assignments/2/*
+*/data/*
+tensorflow/cs20si/ws/data/*
+tensorflow/cs20si/assignments/2/*
 pytorch/getting_started/60minBlitz/data/
 pytorch/getting_started/data_load_proc/data/

@@ -1,2 +1,2 @@
 # ML_Practice
-Repository for practicing ML techniques using TensorFlow etc.
+Repository for practicing machine learning
