@@ -1,3 +1,4 @@
 cs20si/ws/data/*
 cs20si/assignments/2/*
-pytorch/*/data/*
+pytorch/getting_started/60minBlitz/data/
+pytorch/getting_started/data_load_proc/data/
