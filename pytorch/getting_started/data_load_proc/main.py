@@ -63,6 +63,9 @@ class FaceLandmarksDataset(Dataset):
         return sample
 
 
+# create dataset instance
+face_dataset = FaceLandmarksDataset(csv_file='data/faces/face_landmarks.csv', root_dir='data/faces/')
+
 def inspect_dataset():
     face_dataset = FaceLandmarksDataset(csv_file='data/faces/face_landmarks.csv', root_dir='data/faces/')
     fig = plt.figure()
@@ -78,4 +81,77 @@ def inspect_dataset():
             plt.savefig(visual_path+'inspect_dataset.png')
             break
 
-inspect_dataset()
+#inspect_dataset()
+
+## Transforms
+
+class Rescale(object):
+    
+    def __init__(self, output_size):
+        assert isinstance(output_size, (int, tuple))
+        self.output_size = output_size
+
+    def __call__(self, sample):
+        image, landmarks = sample['image'], sample['landmarks']
+        h, w = image.shape[:2]
+        if isinstance(self.output_size, int):
+            # fit short side, preserve aspect ratio
+            if h > w:
+                new_h, new_w = self.output_size * h / w, self.output_size
+            else:
+                new_h, new_w = self.output_size, self.output_size * w / h
+        else:
+            new_h, new_w = self.output_size
+        new_h, new_w = int(new_h), int(new_w)
+        img = transform.resize(image, (new_h, new_w))
+        landmarks = landmarks * [new_w / w, new_h / h] # sneaky!
+        return {'image': img, 'landmarks': landmarks}
+
+class RandomCrop(object):
+
+    def __init__(self, output_size):
+        assert isinstance(output_size, (int, tuple))
+        if isinstance(output_size, int):
+            self.output_size = (output_size, output_size)
+        else:
+            assert len(output_size) == 2
+            self.output_size = output_size
+
+    def __call__(self, sample):
+        image, landmarks = sample['image'], sample['landmarks']
+        h, w = image.shape[:2]
+        new_h, new_w = self.output_size
+
+        top = np.random.randint(0, h - new_h)
+        left = np.random.randint(0, w - new_w)
+
+        image = image[top: top + new_h, left: left + new_w]
+        landmarks = landmarks - [left, top] # sneaky!
+
+        return {'image': image, 'landmarks': landmarks}
+
+class ToTensor(object):
+
+    def __call__(self, sample):
+        image, landmarks = sample['image'], sample['landmarks']
+        image = image.transpose((2, 0, 1)) # H x W x C -> C x H x W
+        return {'image': torch.from_numpy(image),
+                'landmarks': torch.from_numpy(landmarks)}
+
+def transform_demo():
+    scale = Rescale(256)
+    crop = RandomCrop(128)
+    composed = transforms.Compose([Rescale(256), RandomCrop(224)])
+
+    fig = plt.figure()
+    sample = face_dataset[65]
+    for i, tsfrm in enumerate([scale, crop, composed]):
+        transformed_sample = tsfrm(sample)
+        ax = plt.subplot(1, 3, i+1)
+        plt.tight_layout()
+        ax.set_title(type(tsfrm).__name__)
+        show_landmarks(**transformed_sample)
+
+    plt.savefig(visual_path + 'transform_demo.png')
+
+transform_demo()
