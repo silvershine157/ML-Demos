@@ -154,4 +154,60 @@ def transform_demo():
 
     plt.savefig(visual_path + 'transform_demo.png')
 
-transform_demo()
+#transform_demo()
+
+## Putting all together
+
+transformed_dataset = FaceLandmarksDataset(
+    csv_file='data/faces/face_landmarks.csv',
+    root_dir='data/faces/',
+    transform=transforms.Compose([
+        Rescale(256),
+        RandomCrop(224),
+        ToTensor()
+    ]))
+
+def iterate_dataset_for():
+    for i in range(len(transformed_dataset)):
+        sample = transformed_dataset[i]
+        print(i, sample['image'].size(), sample['landmarks'].size())
+        if i==3:
+            break
+
+#iterate_dataset()
+# but we want batching / shuffling / parallelism
+
+## DataLoader
+
+def iterate_dataset_dataloader():
+
+    def show_landmarks_batch(sample_batched):
+        images_batch, landmarks_batch = sample_batched['image'], sample_batched['landmarks']
+        batch_size = len(images_batch)
+        im_size = images_batch.size(2) # width
+        grid_border_size = 2 # known default value?
+        grid = utils.make_grid(images_batch)
+        plt.imshow(grid.numpy().transpose((1, 2, 0)))
+        for i in range(batch_size):
+            plt.scatter(
+                landmarks_batch[i, :, 0].numpy() + i*im_size + (i+1)*grid_border_size,
+                landmarks_batch[i, :, 1].numpy() + grid_border_size,
+                s=10, marker='.', c='r')
+        plt.title('Batch from dataloader')
+
+    # create DataLoader instance
+    dataloader = DataLoader(transformed_dataset, batch_size=4, shuffle=True, num_workers=4)
+
+    for i_batch, sample_batched in enumerate(dataloader):
+        print(i_batch, sample_batched['image'].size(),
+            sample_batched['landmarks'].size())
+
+        if i_batch == 3: # observe 4th batch
+            plt.figure()
+            show_landmarks_batch(sample_batched)
+            plt.axis('off')
+            plt.ioff()
+            plt.savefig(visual_path + 'iterate_dataloader.png')
+            break
+
+iterate_dataset_dataloader()
