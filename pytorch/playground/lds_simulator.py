@@ -42,12 +42,23 @@ class AutoLDS():
             pass
 
     # [ N X observed X length ]
-    def fixed_sys_sequences(self, N, length):
+    def fixed_sys_sequences(self, N, length, observed=None):
+        
         self.randomize_system() # fixed system
+    
+        if(observed == None):
+            observed = self.units
+        else:
+            assert observed <= self.units
+
+        data = np.zeros((N, observed, length))
         for n in range(N):
             # sample initial state
+            init_state = np.random.normal(0.0, 1.0, (self.units))
             # generate sequence
-            pass
+            seq = self.simulate(init_state, length)
+            data[n, :, :] = seq[:observed, :]
+        return data
 
     # [ N X observed X length ]
     def varying_sys_sequences(self, N, length):
@@ -82,4 +93,26 @@ def plot_random():
     plt.plot(seq)
     plt.savefig(visual_path + 'LDS_simulator_test.png')
 
-plot_random()
+def plot_fixed():
+    units = 4
+    length = 30
+    N = 100
+    alds = AutoLDS(units)
+    data = alds.fixed_sys_sequences(N, length)
+
+    target = [
+        data[0, :, :],
+        data[length-1,:,:],
+        data[np.random.randint(0, length),:,:],
+        data[np.random.randint(0,length),:,:]
+    ]
+    fig = plt.figure()
+    for i in range(4):
+        plt.subplot(2, 2, i+1)
+        seq = target[i]
+        seq = seq.squeeze()
+        plt.plot(seq.transpose([1,0]))
+    plt.savefig(visual_path + 'fixed_system_test.png')
+
+
+plot_fixed()
