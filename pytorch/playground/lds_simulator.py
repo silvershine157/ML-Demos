@@ -42,9 +42,10 @@ class AutoLDS():
             pass
 
     # [ N X observed X length ]
-    def fixed_sys_sequences(self, N, length, observed=None):
-        
-        self.randomize_system() # fixed system
+    def fixed_sys_sequences(self, N, length, observed=None, resample_sys=True):
+
+        if(resample_sys):
+            self.randomize_system() # fixed system
     
         if(observed == None):
             observed = self.units

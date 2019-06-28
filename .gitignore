@@ -1,6 +1,3 @@
-*/data/
-tensorflow/cs20si/ws/data/
+__pycache__/
+data/
 tensorflow/cs20si/assignments/2/
-pytorch/tutorials/60minBlitz/data/
-pytorch/tutorials/data_load_proc/data/
-pytorch/playground/data/
