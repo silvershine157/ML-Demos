@@ -31,9 +31,9 @@ class StateOnlyRNN(torch.nn.Module):
 
 def test():
 
-    epochs = 100
-    H_dim = 2
-    n_train = 100
+    epochs = 500
+    H_dim = 10
+    n_train = 20
     n_test = 10
     length = 5
     learning_rate = 1e-4
@@ -56,7 +56,9 @@ def test():
     for e in range(epochs):
         pred = model(train_initial)
         loss = criterion(pred, train_data)
-        print(e, loss.item())
+
+        if(e%10==0):
+            print(e, loss.item())
 
         optimizer.zero_grad()
         loss.backward()
@@ -76,6 +78,5 @@ def compare_plot(pred, actual):
     plt.subplot(1, 2, 2)
     plt.plot(actual.numpy().transpose(1, 0))
     plt.savefig(visual_path + 'state_rnn_prediction.png')
-
 
 test()
