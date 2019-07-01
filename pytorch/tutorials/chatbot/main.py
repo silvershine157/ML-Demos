@@ -74,9 +74,10 @@ def extractSentencePairs(conversations):
                 qa_pairs.append([inputLine, targetLine])
     return qa_pairs
 
+datafile = os.path.join(corpus, "formatted_movie_lines.txt")
+
 generateFormattedFile = False
 if generateFormattedFile:
-    datafile = os.path.join(corpus, "formatted_movie_lines.txt")
     delimiter = '\t'
     delimiter = str(codecs.decode(delimiter, "unicode_escape"))
 
@@ -150,6 +151,81 @@ class Voc:
             self.addWord(word)
 
 
+MAX_LENGTH = 10
 
+# unicode -> ascii
+def unicodeToAscii(s):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+# lowercase, trim, remove non-letters
+def normalizeString(s):
+    s = unicodeToAscii(s.lower().strip())
+    s = re.sub(r"([.!?])", r" \1", s)
+    s = re.sub(r"[^a-zA-Z.!?]+", r" ", s)
+    s = re.sub(r"\s+", r" ", s).strip()
+    return s
+
+# read sentence pairs and return voc object
+def readVocs(datafile, corpus_name):
+    print("Reading lines...")
+    lines = open(datafile, encoding='utf-8').\
+        read().strip().split('\n')
+    pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines]
+    voc = Voc(corpus_name)
+    return voc, pairs
+
+# returns True iff both sentences < MAX_LENGTH
+def filterPair(p):
+    return len(p[0].split(' ')) < MAX_LENGTH and len(p[1].split(' ')) < MAX_LENGTH
+
+def filterPairs(pairs):
+    return [pair for pair in pairs if filterPair(pair)]
+
+def loadPrepareData(corpus, corpus_name, datafile, save_dir):
+    print("Start preparing training data ...")
+    voc, pairs = readVocs(datafile, corpus_name)
+    print("Read {!s} sentence pairs".format(len(pairs)))
+    pairs = filterPairs(pairs)
+    print("Trimmed to {!s} sentence pairs".format(len(pairs)))
+    print("Counting words...")
+    for pair in pairs:
+        voc.addSentence(pair[0])
+        voc.addSentence(pair[1])
+    print("Counted words:", voc.num_words)
+    return voc, pairs
+
+save_dir = os.path.join("data", "save")
+voc, pairs = loadPrepareData(corpus, corpus_name, datafile, save_dir)
+print("\npairs:")
+for pair in pairs[:10]:
+    print(pair)
+
+MIN_COUNT = 3 # minimum word count threshold
+def trimRareWords(voc, pairs, MIN_COUNT):
+    voc.trim(MIN_COUNT)
+    keep_pairs = []
+    for pair in pairs:
+        input_sentence = pair[0]
+        output_sentence = pair[1]
+        keep_input = True
+        keep_output = True
+        for word in input_sentence.split(' '):
+            if word not in voc.word2index:
+                keep_input = False
+                break
+        for word in output_sentence.split(' '):
+            if word not in voc.word2index:
+                keep_output = False
+                break
+        if keep_input and keep_output:
+            keep_pairs.append(pair)
+
+    print("Trimmed from {} pairs to {}".format(len(pairs), len(keep_pairs)))
+    return keep_pairs
+
+pairs = trimRareWords(voc, pairs, MIN_COUNT)
 
 
