@@ -25,6 +25,7 @@ device = torch.device("cuda" if USE_CUDA else "cpu")
 corpus_name = "cornell movie-dialogs corpus"
 corpus = os.path.join("data", corpus_name)
 
+
 def printLines(file, n=10):
     with open(file, 'rb') as datafile:
         lines = datafile.readlines()
@@ -199,6 +200,22 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
 
 save_dir = os.path.join("data", "save")
 voc, pairs = loadPrepareData(corpus, corpus_name, datafile, save_dir)
+
+
+# Model configuration
+
+model_name = 'cb_model'
+attn_model = 'dot'
+hidden_size = 500
+encoder_n_layers = 2
+decoder_n_layers = 2
+dropout = 0.1
+teacher_forcing_ratio = 1.0
+batch_size = 64
+
+loadFilename = None
+checkpoint_iter = 4000
+
 
 '''
 print("\npairs:")
@@ -494,7 +511,7 @@ def train(input_variable, lengths, target_variable, mask, max_target_len, encode
     encoder_outputs, encoder_hidden = encoder(input_variable, lengths)
 
     # create initial decoder input
-    decoder_input = toarch.LongTensor([[SOS_token for _ in range(batch_size)]])
+    decoder_input = torch.LongTensor([[SOS_token for _ in range(batch_size)]])
     decoder_input = decoder_input.to(device)
 
     # set initial decoder hidden state to encoder final hidden state
@@ -652,17 +669,7 @@ def evaluateInput(encoder, decoder, searcher, voc):
         except KeyError:
             print('Error: Encountered unknown word.')
 
-def build_model():
-    model_name = 'cb_model'
-    attn_model = 'dot'
-    hidden_size = 500
-    encoder_n_layers = 2
-    decoder_n_layers = 2
-    dropout = 0.1
-    batch_size = 64
-
-    loadFilename = None
-    checkpoint_iter = 4000
+def build_and_train_model(train=True):
 
     if loadFilename:
         checkpoint = torch.load(loadFilename)
@@ -686,6 +693,29 @@ def build_model():
     decoder = decoder.to(device)
     print('Models built and ready to go!')
 
+    ## train model
+    clip = 50.0
+    
+    learning_rate = 0.0001
+    decoder_learning_ratio = 5.0
+    n_iteration = 4000
+    print_every = 1
+    save_every = 500
+
+    # ensure train mode of dropout
+    encoder.train()
+    decoder.train()
+
+    print('Building optimizers . . .')
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+    if loadFilename:
+        encoder_optimizer.load_state_dict(encoder_optimizer_sd)
+        decoder_optimizer.load_state_dict(decoder_optimizer_sd)
+
+    print('Starting Training!')
+    trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, clip, corpus_name, loadFilename)
+
     return encoder, decoder
 
 def run_eval(encoder, decoder):
@@ -695,7 +725,7 @@ def run_eval(encoder, decoder):
     evaluateInput(encoder, decoder, searcher, voc)
 
 def main():
-    encoder, decoder = build_model()
+    encoder, decoder = build_and_train_model(True)
     run_eval(encoder, decoder)
 
 main()
