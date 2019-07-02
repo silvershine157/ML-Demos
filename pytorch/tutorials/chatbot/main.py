@@ -447,3 +447,29 @@ class LuongAttnDecoderRNN(nn.Module):
 
         return output, hidden
 
+
+
+# Training procedure
+
+def maskNLLLoss(inp, target, mask):
+    
+    # <dimensions>
+    # inp (decoder output): (B, V)
+    # target: (1, B)
+    # mask: (1, B)
+    
+    # nTotal: ()
+    nTotal = mask.sum()
+
+    # target^T: (B, 1)
+    # gather_result[b][0]: inp[b][target^T[b][0]]: (B, 1)
+    # crossEntropy: (B)
+    crossEntropy = -torch.log(torch.gather(inp, 1, target.view(-1, 1)).squeeze(1))
+    # indexing (with gather()) is equivalent to dot product with one-hot vector
+
+    # loss: ()
+    loss = crossEntropy.masked_select(mask).mean()
+    loss = loss.to(device)
+
+    return loss, nTotal.item()
+
