@@ -232,9 +232,11 @@ def trimRareWords(voc, pairs, MIN_COUNT):
 pairs = trimRareWords(voc, pairs, MIN_COUNT)
 
 def indexesFromSentence(voc, sentence):
+    # list of indices
     return [voc.word2index[word] for word in sentence.split(' ')] + [EOS_token]
 
 def zeroPadding(l, fillvalue=PAD_token):
+    # transpose implicitly
     return list(itertools.zip_longest(*l, fillvalue=fillvalue))
 
 def binaryMatrix(l, value=PAD_token):
@@ -249,22 +251,44 @@ def binaryMatrix(l, value=PAD_token):
     return m
 
 def inputVar(l, voc):
+
+    # (B(batch size), L(seq len)) <- not uniform length
     indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
+
+    # (B)
     lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
+
+    # (L, B)
     padList = zeroPadding(indexes_batch)
+
+    # (L, B)
     padVar = torch.LongTensor(padList)
+
     return padVar, lengths
 
 def outputVar(l, voc):
+
+    # (B, L) <- not uniform length
     indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
+
+    # ()
     max_target_len = max([len(indexes) for indexes in indexes_batch])
+
+    # (L, B)
     padList = zeroPadding(indexes_batch)
+
+    # (L, B)
     mask = binaryMatrix(padList)
     mask = torch.ByteTensor(mask)
+    
+    # (L, B)
     padVar = torch.LongTensor(padList)
+
     return padVar, mask, max_target_len
 
 def batch2TrainData(voc, pair_batch):
+
+    # list of B pairs
     pair_batch.sort(key=lambda x: len(x[0].split(" ")), reverse=True)
     input_batch, output_batch = [], []
     for pair in pair_batch:
@@ -272,6 +296,13 @@ def batch2TrainData(voc, pair_batch):
         output_batch.append(pair[1])
     inp, lengths = inputVar(input_batch, voc)
     output, mask, max_target_len = outputVar(output_batch, voc)
+
+    # <dimensions>
+    # inp: (L, B)
+    # lengths: (B)
+    # output: (L, B)
+    # mask: (L, B)
+    # max_target_len: ()
     return inp, lengths, output, mask, max_target_len
 
 '''
@@ -298,12 +329,23 @@ class EncoderRNN(nn.Module):
                             dropout=(0 if n_layers == 1 else dropout), bidirectional=True)
 
     def forward(self, input_seq, input_lengths, hidden=None):
+
+        # (L, B)->(L, B, H)
         embedded = self.embedding(input_seq)
+        
+        # no calculation on zero paddings
         packed = nn.utils.rnn.pack_padded_sequences(embedded, input_lengths)
+
+        # outputs: (L, B, 2H)
+        # hidden: (n_layers * 2, B, H)
         outputs, hidden = self.gru(packed, hidden) # outputs and final hidden state
         outputs, _ = nn.utils.rnn.pad_packed_sequences(outputs)
+
         # sum outputs for 2 directions
         outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]
+
+        # outputs: (L, B, H)
+        # hidden: (n_layers * 2, B, H)
         return outputs, hidden
 
 # Luong attention layer
@@ -334,6 +376,8 @@ class Attn(nn.Module):
             return torch.sum(self.v * energy, dim=2)
 
         def forward(self, hidden, encoder_outputs):
+
+            # (L, B)
             if self.method == 'general':
                 attn_energies = self.general_score(hidden, encoder_outputs)
             elif self.method == 'concat':
@@ -341,6 +385,65 @@ class Attn(nn.Module):
             elif self.method == 'dot':
                 attn_energies = self.dot_score(hidden, encoder_outputs)
 
+            # (B, L)
             attn_energies = attn_energies.t()
+
+            # softmax over L, unsqueeze -> (B, 1, L)
             return F.softmax(attn_energies, dim=1).unsqueeze(1)
-            
+
+class LuongAttnDecoderRNN(nn.Module):
+    def __init__(self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1):
+        super(LuongAttnDecoderRNN, self).__init__()
+
+        self.attn_model = attn_model
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.n_layers = n_layers
+        self.dropout = dropout
+
+        # layers
+        self.embedding = embedding
+        self.embedding_dropout = nn.Dropout(dropout)
+        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=(0 if n_layers == 1 else dropout))
+        self.W_concat = nn.Linear(hidden_size * 2, hidden_size)
+        self.W_out = nn.Linear(hidden_size, output_size)
+        self.attn = Attn(attn_model, hidden_size)
+
+    def forward(self, input_step, last_hidden, encoder_outputs):
+
+        # input_step: (1, B)
+        # last_hidden: (n_layers, B, H)
+        # encoder_outputs: (L, B, H)
+
+        # (1, B, H)
+        embedded = self.embedding(input_step)
+        embedded = self.embedding_dropout(embedded)
+        
+        # rnn_output: (1, B, H)
+        # hidden: (n_layers, B, H)
+        rnn_output, hidden = self.gru(embedded, last_hidden)
+        
+        # (B, 1, L)
+        attn_weights = self.attn(rnn_output, encoder_outputs)
+        
+        # (B, 1, L) batchMatMul (B, L, H) -> (B, 1, H)
+        context = attn_weights.bmm(encoder_outputs.transpose(0, 1))
+
+        # (B, H)
+        rnn_output = rnn_output.squeeze(0)
+
+        # (B, H)
+        context = context.squeeze(1)
+
+        # (B, 2H)
+        concat_input = torch.cat((rnn_output, context), 1)
+
+        # (B, H)
+        concat_output = torch.tanh(self.W_concat(concat_input))
+
+        # (B, V) V: output vocabulary size
+        output = self.W_out(concat_output)
+        output = F.softmax(output, dim=1)
+
+        return output, hidden
+
