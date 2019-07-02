@@ -334,12 +334,12 @@ class EncoderRNN(nn.Module):
         embedded = self.embedding(input_seq)
         
         # no calculation on zero paddings
-        packed = nn.utils.rnn.pack_padded_sequences(embedded, input_lengths)
+        packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
 
         # outputs: (L, B, 2H)
         # hidden: (n_layers * 2, B, H)
         outputs, hidden = self.gru(packed, hidden) # outputs and final hidden state
-        outputs, _ = nn.utils.rnn.pad_packed_sequences(outputs)
+        outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
 
         # sum outputs for 2 directions
         outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]
@@ -362,34 +362,34 @@ class Attn(nn.Module):
             self.attn = nn.Linear(self.hidden_size * 2, hidden_size)
             self.v = nn.Parameter(torch.FloatTensor(hidden_size))
 
-        def dot_score(self, hidden, encoder_output):
-            return torch.sum(hidden * encoder_output, dim=2)
+    def dot_score(self, hidden, encoder_output):
+        return torch.sum(hidden * encoder_output, dim=2)
 
-        def general_score(self, hidden, encoder_output):
-            energy = self.attn(encoder_output)
-            return torch.sum(hidden * energy, dim=2)
+    def general_score(self, hidden, encoder_output):
+        energy = self.attn(encoder_output)
+        return torch.sum(hidden * energy, dim=2)
 
-        def concat_score(self, hidden, encoder_output):
-            energy = self.attn(
-                torch.cat((hidden.expand(encoder_output.size(0), -1, -1), encoder_output), 2)
-            ).tanh()
-            return torch.sum(self.v * energy, dim=2)
+    def concat_score(self, hidden, encoder_output):
+        energy = self.attn(
+            torch.cat((hidden.expand(encoder_output.size(0), -1, -1), encoder_output), 2)
+        ).tanh()
+        return torch.sum(self.v * energy, dim=2)
 
-        def forward(self, hidden, encoder_outputs):
+    def forward(self, hidden, encoder_outputs):
 
-            # (L, B)
-            if self.method == 'general':
-                attn_energies = self.general_score(hidden, encoder_outputs)
-            elif self.method == 'concat':
-                attn_energies = self.concat_score(hidden, encoder_outputs)
-            elif self.method == 'dot':
-                attn_energies = self.dot_score(hidden, encoder_outputs)
+        # (L, B)
+        if self.method == 'general':
+            attn_energies = self.general_score(hidden, encoder_outputs)
+        elif self.method == 'concat':
+            attn_energies = self.concat_score(hidden, encoder_outputs)
+        elif self.method == 'dot':
+            attn_energies = self.dot_score(hidden, encoder_outputs)
 
-            # (B, L)
-            attn_energies = attn_energies.t()
+        # (B, L)
+        attn_energies = attn_energies.t()
 
-            # softmax over L, unsqueeze -> (B, 1, L)
-            return F.softmax(attn_energies, dim=1).unsqueeze(1)
+        # softmax over L, unsqueeze -> (B, 1, L)
+        return F.softmax(attn_energies, dim=1).unsqueeze(1)
 
 class LuongAttnDecoderRNN(nn.Module):
     def __init__(self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1):
@@ -599,4 +599,109 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
                     'voc_dict': voc.__dict__,
                     'embedding': embedding.state_dict()
                 }, os.path.join(directory, '{}_{}.tar'.format(iteration, 'checkpoint')))
+
+
+## Evaluation
+
+class GreedySearchDecoder(nn.Module):
+    def __init__(self, encoder, decoder):
+        super(GreedySearchDecoder, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, input_seq, input_length, max_length):
+        # forward input through encoder
+        encoder_outputs, encoder_hidden = self.encoder(input_seq, input_length)
+        decoder_hidden = encoder_hidden[:self.decoder.n_layers]
+        decoder_input = torch.ones(1, 1, device=device, dtype=torch.long) * SOS_token
+
+        # initialize tensors to eppend to
+        all_tokens = torch.zeros([0], device=device, dtype=torch.long)
+        all_scores = torch.zeros([0], device=device)
+
+        # greedy decoding
+        for _ in range(max_length):
+            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
+            decoder_scores, decoder_input = torch.max(decoder_output, dim=1)
+            all_tokens = torch.cat((all_tokens, decoder_input), dim=0)
+            all_scores = torch.cat((all_scores, decoder_scores), dim=0)
+            decoder_input = torch.unsqueeze(decoder_input, 0) # next decoder input
+
+        return all_tokens, all_scores
+
+def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
+    indexes_batch = [indexesFromSentence(voc, sentence)]
+    lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
+    input_batch = torch.LongTensor(indexes_batch).transpose(0, 1)
+    input_batch = input_batch.to(device)
+    lenghts = lengths.to(device)
+    tokens, scores = searcher(input_batch, lengths, max_length)
+    decoded_words = [voc.index2word[token.item()] for token in tokens]
+    return decoded_words
+
+def evaluateInput(encoder, decoder, searcher, voc):
+    input_sentence = ''
+    while(True):
+        try:
+            input_sentence = input('> ')
+            if input_sentence == 'q' or input_sentence == 'quit': break
+            input_sentence = normalizeString(input_sentence)
+            output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
+            output_words[:] = [x for x in output_words if not (x == 'EOS' or x == 'PAD')]
+            print('Bot:', ' '.join(output_words))
+        except KeyError:
+            print('Error: Encountered unknown word.')
+
+def build_model():
+    model_name = 'cb_model'
+    attn_model = 'dot'
+    hidden_size = 500
+    encoder_n_layers = 2
+    decoder_n_layers = 2
+    dropout = 0.1
+    batch_size = 64
+
+    loadFilename = None
+    checkpoint_iter = 4000
+
+    if loadFilename:
+        checkpoint = torch.load(loadFilename)
+        encoder_sd = checkpoint['en']
+        decoder_sd = checkpoint['de']
+        encoder_optimizer_sd = checkpoint['en_opt']
+        decoder_optimizer_sd = checkpoint['de_opt']
+        embedding_sd = checkpoint['embedding']
+        voc.__dict__ = checkpoint['voc_dict']
+
+    print('Building encoder and decoder . . .')
+    embedding = nn.Embedding(voc.num_words, hidden_size)
+    if loadFilename:
+        embedding.load_state_dict(embedding_sd)
+    encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
+    decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num_words, decoder_n_layers, dropout)
+    if loadFilename:
+        encoder.load_state_dict(encoder_sd)
+        decoder.load_state_dict(decoder_sd)
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
+    print('Models built and ready to go!')
+
+    return encoder, decoder
+
+def run_eval(encoder, decoder):
+    encoder.eval()
+    decoder.eval()
+    searcher = GreedySearchDecoder(encoder, decoder)
+    evaluateInput(encoder, decoder, searcher, voc)
+
+def main():
+    encoder, decoder = build_model()
+    run_eval(encoder, decoder)
+
+main()
+
+
+
+
+
 
