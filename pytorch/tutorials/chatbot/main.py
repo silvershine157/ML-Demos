@@ -353,7 +353,7 @@ class Attn(nn.Module):
     def __init__(self, method, hidden_size):
         super(Attn, self).__init__()
         self.method = method
-        if self.method not in ['dot', 'general', 'concat']
+        if self.method not in ['dot', 'general', 'concat']:
             raise ValueError(self.method, "is not an appropriate attention method.")
         self.hidden_size = hidden_size
         if self.method == 'general':
@@ -472,4 +472,85 @@ def maskNLLLoss(inp, target, mask):
     loss = loss.to(device)
 
     return loss, nTotal.item()
+
+def train(input_variable, lengths, target_variable, mask, max_target_len, encoder, decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip, max_length=MAX_LENGTH):
+
+    # zero gradients
+    encoder_optimizer.zero_grad()
+    decoder_optimizer.zero_grad()
+
+    # set device options
+    input_variable = input_variable.to(device)
+    lengths = lengths.to(device)
+    target_variable = target_variable.to(device)
+    mask = mask.to(device)
+
+    # initialize variables
+    loss = 0
+    print_losses = []
+    n_totals = 0
+
+    # encoder forward pass
+    encoder_outputs, encoder_hidden = encoder(input_variable, lengths)
+
+    # create initial decoder input
+    decoder_input = toarch.LongTensor([[SOS_token for _ in range(batch_size)]])
+    decoder_input = decoder_input.to(device)
+
+    # set initial decoder hidden state to encoder final hidden state
+    decoder_hidden = encoder_hidden[:decoder.n_layers]
+
+    # randomly determine whether to use teacher forcing for this iteration
+    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+
+    # forward pass trough time, calculate loss
+    if use_teacher_forcing:
+        for t in range(max_target_len):
+            # decoder forward pass
+            decoder_output, decoder_hidden = decoder(
+                decoder_input, decoder_hidden, encoder_outputs
+            )
+            # teacher forcing
+
+            # (1, B)
+            decoder_input = target_variable[t].view(1, -1)
+
+            mask_loss, nTotal = maskNLLLoss(decoder_output, target_variable[t], mask[t])
+            loss += mask_loss
+            print_losses.append(mask_loss.item() * nTotal)
+            n_totals += nTotal
+    else:
+        for t in range(max_target_len):
+            # decoder forward pass
+            decoder_output, decoder_hidden = decoder(
+                decoder_input, decoder_hidden, encoder_outputs
+            )            
+            # feed previous output
+
+            # topi: most likely word index (use last dimension: V)
+            # -> shape (B, 1)
+            _, topi = decoder_output.topk(1)
+
+            # (1, B)
+            decoder_input = torch.LongTensor([[topi[i][0] for i in range(batch_size)]])
+            decoder_input = decoder_input.to(device)
+
+            mask_loss, nTotal = maskNLLLoss(decoder_output, target_variable[t], mask[t])
+            loss += mask_loss
+            print_losses.append(mask_loss.item() * nTotal)
+            n_totals += nTotal
+
+    # Backprop
+    loss.backward()
+
+    # Clip gradients (in place)
+    _ = nn.utils.clip_grad_norm_(encoder.parameters(), clip)
+    _ = nn.utils.clip_grad_norm_(decoder.parameters(), clip)
+
+    # Adjust model weights
+    encoder_optimizer.step()
+    decoder_optimizer.step()
+
+    return sum(print_losses) / n_totals
+
 
