@@ -8,16 +8,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data.sampler import SubsetRandomSampler
 
-BATCH_SIZE = 128
-LATENT_DIM = 1000
-EPOCHS = 50
+BATCH_SIZE = 8
+HIDDEN_DIM = 1000
+LATENT_DIM = 2
+EPOCHS = 3
+learning_rate = 1.0
+
+mini_data = False
+mini_size = 1000
+
 print_every = 100
 
-visual_path = 'data/visual/'
 
-mini_data = True
-mini_size = 1000
-learning_rate = 0.01
+visual_path = 'data/visual/'
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -48,13 +51,13 @@ class Encoder(nn.Module):
 		super(Encoder, self).__init__()
 		
 		# MLP encoder
-		self.fc1 = nn.Linear(28 * 28, 1000)
-		self.fc2 = nn.Linear(1000, output_dim)
+		self.fc1 = nn.Linear(28 * 28, HIDDEN_DIM)
+		self.fc2 = nn.Linear(HIDDEN_DIM, output_dim)
 
 	def forward(self, x):
 		x_flat = x.view(-1, 28 * 28)
 		a1 = F.relu(self.fc1(x_flat))
-		a2 = self.fc2(a1)
+		a2 = torch.tanh(self.fc2(a1))
 		return a2
 
 class Decoder(nn.Module):
@@ -62,8 +65,8 @@ class Decoder(nn.Module):
 		super(Decoder, self).__init__()
 
 		# MLP decoder
-		self.fc1 = nn.Linear(input_dim, 1000)
-		self.fc2 = nn.Linear(1000, 28 * 28)
+		self.fc1 = nn.Linear(input_dim, HIDDEN_DIM)
+		self.fc2 = nn.Linear(HIDDEN_DIM, 28 * 28)
 
 	def forward(self, z):
 		a1 = F.relu(self.fc1(z))
@@ -72,30 +75,39 @@ class Decoder(nn.Module):
 		return unflat
 
 class Shallow(nn.Module):
-	##The network struggles to learn identity transform even for shallow case
+	##The network struggles to learn identity transform even for the shallow case
 	def __init__(self, hidden_dim):
 		super(Shallow, self).__init__()
-
-		#self.fc1 = nn.Linear(28 * 28, hidden_dim)
-		#self.fc2 = nn.Linear(hidden_dim, 28 * 28)
-		#self.weights = nn.Parameter(torch.ones(28 * 28))
-		self.weights = nn.Parameter(torch.ones(28 * 28))
-
-		#self.fc1 = nn.Linear(28 * 28, 28 * 28)
+		self.fc1 = nn.Linear(28 * 28, hidden_dim)
+		self.fc2 = nn.Linear(hidden_dim, 28 * 28)
 
 	def forward(self, x):
 		x_flat = x.view(-1, 28 * 28)
-		#a1 = torch.tanh(self.fc1(x_flat))
-		#a2 = torch.tanh(self.fc2(a1))
-		#unflat = a2.view(-1, 1, 28, 28)
-
-		a1 = torch.tanh(self.weights * x_flat)
-		unflat = a1.view(-1, 1, 28, 28)
+		a1 = torch.tanh(self.fc1(x_flat))
+		a2 = torch.tanh(self.fc2(a1))
+		unflat = a2.view(-1, 1, 28, 28)
 
 		return unflat
 
 
 def test_autoencoder():
+
+	'''
+	Working configuration:
+
+	BATCH_SIZE = 16
+	HIDDEN_DIM = 1000
+	LATENT_DIM = 100
+	EPOCHS = 2
+	learning_rate = 0.3
+
+	BATCH_SIZE = 16
+	HIDDEN_DIM = 1000
+	LATENT_DIM = 10
+	EPOCHS = 2
+	learning_rate = 0.3
+
+	'''
 
 	encoder = Encoder(output_dim=LATENT_DIM)
 	decoder = Decoder(input_dim=LATENT_DIM)
@@ -145,6 +157,39 @@ def test_autoencoder():
 		xh = decoder(encoder(x))
 		visualize_reconstructions(x, xh)
 
+	if (LATENT_DIM == 2):
+		print('drawing grid')
+		with torch.no_grad():
+			grid_sz = 10
+			#(G, G, 2)
+			gridvals = np.linspace(0.0, 1.0, grid_sz)
+			grid = []
+			for x in gridvals:
+				row = []
+				for y in gridvals:
+					row.append([x, y])
+				grid.append(row)
+
+			grid = np.array(grid)
+			grid = torch.Tensor(grid)
+
+			#(G * G, 2)
+			z = grid.view(-1, 2)
+			#print(z.shape)
+			#print(z)
+
+			z = z.to(device)
+			xh = decoder(z)
+
+			fig = plt.figure()
+			for i in range(grid_sz):
+				for j in range(grid_sz):
+					idx = grid_sz*i + j
+					plt.subplot(grid_sz, grid_sz, idx+1)
+					show_tensor_img(xh[idx])
+			plt.savefig(visual_path+'visualize_grid.png')
+
+
 
 def test_shallow():
 	shallow = Shallow(LATENT_DIM)
@@ -154,7 +199,7 @@ def test_shallow():
 
 	train = True
 	if(train):
-		print('Start training autoencoder')
+		print('Start training shallow autoencoder')
 		for epoch in range(EPOCHS):
 			running_loss = 0.0
 			total_loss = 0.0
@@ -183,11 +228,10 @@ def test_shallow():
 
 	print('visualize inputs')
 	with torch.no_grad():
-		x, _ = iter(train_loader).next()
+		x, _ = iter(test_loader).next()
 		x = x.to(device)
 		xh = shallow(x)
 		visualize_reconstructions(x, xh)
-
 
 def visualize_reconstructions(x, xh):
 	fig = plt.figure()
@@ -209,4 +253,4 @@ def show_tensor_img(img):
 	plt.pause(0.001)
 
 
-test_shallow()
+test_autoencoder()
