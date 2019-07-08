@@ -6,12 +6,18 @@ import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
+from torch.utils.data.sampler import SubsetRandomSampler
 
 BATCH_SIZE = 128
-LATENT_DIM = 100
-EPOCHS = 5
+LATENT_DIM = 1000
+EPOCHS = 50
+print_every = 100
 
 visual_path = 'data/visual/'
+
+mini_data = True
+mini_size = 1000
+learning_rate = 0.01
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -26,9 +32,15 @@ transform = transforms.Compose([
 ])
 
 train_data = torchvision.datasets.MNIST('data/mnist', train=True, download=True, transform=transform)
-test_data = torchvision.datasets.MNIST('data/mnist', train=True, download=True, transform=transform)
+test_data = torchvision.datasets.MNIST('data/mnist', train=False, download=True, transform=transform)
 
-train_loader = torch.utils.data.DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+if(mini_data):
+	print('use mini data')
+	train_indices = list(range(mini_size))
+	train_sampler = SubsetRandomSampler(train_indices)
+	train_loader = torch.utils.data.DataLoader(train_data, batch_size=BATCH_SIZE, sampler=train_sampler)
+else:
+	train_loader = torch.utils.data.DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True)
 
 class Encoder(nn.Module):
@@ -59,6 +71,30 @@ class Decoder(nn.Module):
 		unflat = a2.view(-1, 1, 28, 28)
 		return unflat
 
+class Shallow(nn.Module):
+	##The network struggles to learn identity transform even for shallow case
+	def __init__(self, hidden_dim):
+		super(Shallow, self).__init__()
+
+		#self.fc1 = nn.Linear(28 * 28, hidden_dim)
+		#self.fc2 = nn.Linear(hidden_dim, 28 * 28)
+		#self.weights = nn.Parameter(torch.ones(28 * 28))
+		self.weights = nn.Parameter(torch.ones(28 * 28))
+
+		#self.fc1 = nn.Linear(28 * 28, 28 * 28)
+
+	def forward(self, x):
+		x_flat = x.view(-1, 28 * 28)
+		#a1 = torch.tanh(self.fc1(x_flat))
+		#a2 = torch.tanh(self.fc2(a1))
+		#unflat = a2.view(-1, 1, 28, 28)
+
+		a1 = torch.tanh(self.weights * x_flat)
+		unflat = a1.view(-1, 1, 28, 28)
+
+		return unflat
+
+
 def test_autoencoder():
 
 	encoder = Encoder(output_dim=LATENT_DIM)
@@ -67,16 +103,15 @@ def test_autoencoder():
 	decoder.to(device)
 
 	criterion = nn.MSELoss()
-	encoder_opt = optim.SGD(encoder.parameters(), lr=0.01)
-	decoder_opt = optim.SGD(decoder.parameters(), lr=0.01)
-
-	print_every = 100
+	encoder_opt = optim.SGD(encoder.parameters(), lr=learning_rate)
+	decoder_opt = optim.SGD(decoder.parameters(), lr=learning_rate)
 
 	train = True
 	if(train):
 		print('Start training autoencoder')
 		for epoch in range(EPOCHS):
 			running_loss = 0.0
+			total_loss = 0.0
 			for i, data in enumerate(train_loader, 0):
 
 				encoder_opt.zero_grad()
@@ -93,10 +128,13 @@ def test_autoencoder():
 				decoder_opt.step()
 
 				running_loss += loss.item()
+				total_loss += loss.item()
 
 				if(i % print_every == (print_every-1)):
 					print('Epoch %d: iter %d: loss: %0.4f'%(epoch, i, running_loss/print_every))
 					running_loss = 0.0
+
+			print('Epcoh %d: total loss: %0.4f'%(epoch, total_loss))
 
 		print('Training complete')
 
@@ -106,6 +144,50 @@ def test_autoencoder():
 		x = x.to(device)
 		xh = decoder(encoder(x))
 		visualize_reconstructions(x, xh)
+
+
+def test_shallow():
+	shallow = Shallow(LATENT_DIM)
+	shallow.to(device)
+	criterion = nn.MSELoss()
+	opt = optim.SGD(shallow.parameters(), lr=learning_rate)
+
+	train = True
+	if(train):
+		print('Start training autoencoder')
+		for epoch in range(EPOCHS):
+			running_loss = 0.0
+			total_loss = 0.0
+			for i, data in enumerate(train_loader, 0):
+
+				opt.zero_grad()
+
+				x = data[0].to(device)
+
+				xh = shallow(x)
+				loss = criterion(x, xh)
+
+				loss.backward()
+				opt.step()
+
+				running_loss += loss.item()
+				total_loss += loss.item()
+
+				if(i % print_every == (print_every-1)):
+					print('Epoch %d: iter %d: loss: %0.4f'%(epoch, i, running_loss/print_every))
+					running_loss = 0.0
+
+			print('Epcoh %d: total loss: %0.4f'%(epoch, total_loss))
+
+		print('Training complete')
+
+	print('visualize inputs')
+	with torch.no_grad():
+		x, _ = iter(train_loader).next()
+		x = x.to(device)
+		xh = shallow(x)
+		visualize_reconstructions(x, xh)
+
 
 def visualize_reconstructions(x, xh):
 	fig = plt.figure()
@@ -127,4 +209,4 @@ def show_tensor_img(img):
 	plt.pause(0.001)
 
 
-test_autoencoder()
+test_shallow()
