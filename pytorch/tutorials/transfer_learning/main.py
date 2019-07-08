@@ -148,23 +148,41 @@ def visualize_model(model, num_images=6):
 
 
 ## Finetuning convnet
+def test_finetuning():
+    model_ft = models.resnet18(pretrained=True) # from torchvision
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Linear(num_ftrs, 2) # replace fc layer
+    model_ft = model_ft.to(device)
+    criterion = nn.CrossEntropyLoss()
 
-model_ft = models.resnet18(pretrained=True) # from torchvision
-num_ftrs = model_ft.fc.in_features
-model_ft.fc = nn.Linear(num_ftrs, 2) # replace fc layer
+    # all parameters are being optimized
+    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-model_ft = model_ft.to(device)
-
-criterion = nn.CrossEntropyLoss()
-
-# all parameters are being optimized
-optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
-
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+    # train and eval
+    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25)
+    visualize_model(model_ft)
 
 
-## train and eval
 
-model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25)
-visualize_model(model_ft)
+## CNN as fixed feature extractor 
+def test_feature_extractor():
+    model_conv = models.resnet18(pretrained=True)
+    for param in model_conv.parameters():
+        param.requires_grad = False
 
+    num_ftrs = model_conv.fc.in_features
+    model_conv.fc = nn.Linear(num_ftrs, 2)
+    model_conv = model_conv.to(device)
+
+    criterion = nn.CrossEntropyLoss()
+
+    # freeze parameters except final layer
+    optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
+
+    # train and eval
+    model_conv = train_model(model_conv, criterion, optimizer_conv, exp_lr_scheduler, num_epochs=25)
+    visualize_model(model_conv)
+
+test_feature_extractor()
