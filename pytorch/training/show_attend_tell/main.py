@@ -9,17 +9,17 @@ import itertools
 data_dir = "./data/flickr8k/"
 
 # original data
-caption_file = data_dir + "Flickr_Data/Flickr_TextData/Flickr8k.lemma.token.txt"
-image_dir = data_dir + "Flickr_Data/Images/"
+orig_caption_file = data_dir + "Flickr_Data/Flickr_TextData/Flickr8k.lemma.token.txt"
+orig_image_dir = data_dir + "Flickr_Data/Images/"
 
 # intermediate data
-load_intermediate_data = True
+new_intermediate_data = True
 voca_file = data_dir + "processed/voca.txt"
 image_names_file = data_dir + "processed/image_names.txt"
 captions_file = data_dir + "processed/captions_file"
 
 # CNN activations
-load_cnn_activations = True
+new_cnn_activations = True
 CNN_BATCH_SIZE = 1024
 cnn_activations_file = data_dir + "processed/cnn_activations"
 
@@ -30,7 +30,7 @@ MIN_WORD_COUNT = 3
 # maximum caption legnth (does not count <start>, <end>)
 MAX_CAPTION_LENGTH = 10
 
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 
 # resizing
 IMG_SIZE = 224 # >= 224
@@ -271,10 +271,9 @@ def caption_list_to_tensor(voc, caption_list):
 
 
 # don't write files
-def test():
+def test_1():
 
-	voc, captions, image_names = process_caption_file(caption_file, num_lines=NUM_LINES)
-
+	voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
 	'''
 	voc: maintains word <-> idx mapping info
 	captions: list of N caption groups
@@ -284,7 +283,7 @@ def test():
 		- list of image file names, order consistent with captions
 	'''
 
-	cnn_activations = make_cnn_activations(image_names, image_dir, CNN_BATCH_SIZE)
+	cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
 	'''
 	cnn_activations: (N, C, W, H) tensor where
 	- N: number of images
@@ -307,28 +306,58 @@ def test():
 	mask: (max_target_len, B)
 	max_target_len: integer
 	'''
+
 	print(caption_batch)
 	print(mask_batch)
+	print(max_target_len)
+
+# save & load data
+def save_intermediate_data(voc, captions, image_names, voca_file, captions_file, image_names_file):
+	pass
+
+def load_intermediate_data(voca_file, captions_file, image_names_file):
+
+	voc, captions, image_names = None, None, None
 
 
-def debug(caption_file):
-	with open(caption_file) as f:
-		_ = f.readline() # ignore first line
-		lines = f.readlines()
+	return voc, captions, image_names
 
-	for line in lines:
-		# read image name & words
-		tokens = line.strip().split()
-		img_name = (tokens[0].split("#"))[0]
+def save_cnn_activations(cnn_activations, cnn_activations_file):
+	pass
 
-		print(img_name)
+def load_cnn_activations(cnn_activations_file):
+
+	cnn_activations = None
+
+
+	return cnn_activations
+
+
+def test_2():
+
+	# get voc, captions, image_names
+	if new_intermediate_data:
+		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
+		save_intermediate_data(voc, captions, image_names, voca_file, captions_file, image_names_file)
+	else:
+		voc, captions, image_names = load_intermediate_data(voca_file, captions_file, image_names_file)
+
+	# get cnn activations
+	if new_cnn_activations:
+		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
+		save_cnn_activations(cnn_activations, cnn_activations_file)
+	else:
+		cnn_activations = load_cnn_activations(cnn_activations_file)
+
+
+
 
 def main():
 	# TODO
 	pass
 
 #debug(caption_file)
-test()
+test_2()
 
 
 
