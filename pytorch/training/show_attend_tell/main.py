@@ -13,13 +13,11 @@ orig_caption_file = data_dir + "Flickr_Data/Flickr_TextData/Flickr8k.lemma.token
 orig_image_dir = data_dir + "Flickr_Data/Images/"
 
 # intermediate data
-new_intermediate_data = True
-voca_file = data_dir + "processed/voca.txt"
-image_names_file = data_dir + "processed/image_names.txt"
-captions_file = data_dir + "processed/captions_file"
+new_intermediate_data = False
+intermediate_data_file = data_dir + "processed/intermediate_data"
 
 # CNN activations
-new_cnn_activations = True
+new_cnn_activations = False
 CNN_BATCH_SIZE = 1024
 cnn_activations_file = data_dir + "processed/cnn_activations"
 
@@ -36,7 +34,7 @@ BATCH_SIZE = 8
 IMG_SIZE = 224 # >= 224
 
 # DEBUG
-NUM_LINES = 1000
+NUM_LINES = 100
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -310,27 +308,8 @@ def test_1():
 	print(caption_batch)
 	print(mask_batch)
 	print(max_target_len)
+	return
 
-# save & load data
-def save_intermediate_data(voc, captions, image_names, voca_file, captions_file, image_names_file):
-	pass
-
-def load_intermediate_data(voca_file, captions_file, image_names_file):
-
-	voc, captions, image_names = None, None, None
-
-
-	return voc, captions, image_names
-
-def save_cnn_activations(cnn_activations, cnn_activations_file):
-	pass
-
-def load_cnn_activations(cnn_activations_file):
-
-	cnn_activations = None
-
-
-	return cnn_activations
 
 
 def test_2():
@@ -338,18 +317,19 @@ def test_2():
 	# get voc, captions, image_names
 	if new_intermediate_data:
 		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
-		save_intermediate_data(voc, captions, image_names, voca_file, captions_file, image_names_file)
+		torch.save((voc, captions, image_names), intermediate_data_file)
 	else:
-		voc, captions, image_names = load_intermediate_data(voca_file, captions_file, image_names_file)
+		voc, captions, image_names = torch.load(intermediate_data_file)
 
 	# get cnn activations
 	if new_cnn_activations:
 		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
-		save_cnn_activations(cnn_activations, cnn_activations_file)
+		torch.save(cnn_activations, cnn_activations_file)
 	else:
-		cnn_activations = load_cnn_activations(cnn_activations_file)
+		cnn_activations = torch.load(cnn_activations_file)
 
-
+	# time to build model!
+	
 
 
 def main():
