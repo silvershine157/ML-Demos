@@ -1,7 +1,6 @@
 Implementation of "Show, attend, and tell", paper by K. Xu et al.
 
 plan:
-
 - Data normalizer
 - Toy data generator
 - Calculate CNN activations
@@ -9,3 +8,4 @@ plan:
 - Train with toy data
 - Train with real data
 - (optional) stochastic hard attention
+
