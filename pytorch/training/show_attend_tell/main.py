@@ -4,6 +4,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import random
+import itertools
 
 data_dir = "./data/flickr8k/"
 
@@ -41,12 +42,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # Vocabulary mapping inspired by pytorch chatbot tutorial
+
+PAD_token = 0
+START_token = 1
+END_token = 2
+
 class Voc(object):
 
 	def __init__(self):
 		self.word2idx = {}
 		self.word2cnt = {}
-		self.idx2word = {0: "<pad>", 1: "<start>", 2: "<end>"}
+		self.idx2word = {PAD_token: "<pad>", START_token: "<start>", END_token: "<end>"}
 		self.num_words = 3
 		self.trimmed = False
 
@@ -83,7 +89,7 @@ class Voc(object):
 		# give new indices
 		self.word2idx = {}
 		self.word2cnt = {}
-		self.idx2word = {0: "<pad>", 1: "<start>", 2: "<end>"}
+		self.idx2word = {PAD_token: "<pad>", START_token: "<start>", END_token: "<end>"}
 		self.num_words = 3
 		for word in keep_words:
 			self.add_word(word)
@@ -220,21 +226,48 @@ def sample_batch(cnn_activations, captions, batch_size):
 
 	batch_idx = np.random.randint(len(captions), size=batch_size)
 	activation_batch = cnn_activations[batch_idx]
-	caption_batch = []
+	caption_batch_list = []
 	for idx in batch_idx:
 		caption_group = captions[idx]
-		caption_batch.append(random.choice(caption_group))
+		caption_batch_list.append(random.choice(caption_group))
 
-	batch = (activation_batch, caption_batch)
-	return batch
+	return activation_batch, caption_batch_list
 
+def sentence_to_indices(voc, sentence):
+	return [START_token] + [voc.word2idx[word] for word in sentence] + [END_token]
 
-def batch_to_train_data(voc, batch):
+def zero_padding(indices_batch, fillvalue=PAD_token):
+	# implicitly transpose
+	return list(itertools.zip_longest(*indices_batch, fillvalue=fillvalue))
 
+def obtain_mask(indices_batch, value=PAD_token):
+	mask = []
+	for i, seq in enumerate(indices_batch):
+		mask.append([])
+		for token in seq:
+			if token == PAD_token:
+				mask[i].append(0)
+			else:
+				mask[i].append(1)
+	return mask
+
+def caption_list_to_tensor(voc, caption_list):
+	# also inspired by pytorch chatbot tutorial
+
+	caption, mask, max_target_len = None, None, None
+
+	indices_batch = [sentence_to_indices(voc, sentence) for sentence in caption_list]
+	max_target_len = max([len(indices) for indices in indices_batch])
 	
+	# (max_target_len, B) <- implicitly transposed
+	indices_batch = zero_padding(indices_batch)
 
-	return None, None, None, None
+	mask_batch = obtain_mask(indices_batch)
+	mask_batch = torch.ByteTensor(mask_batch)
 
+	indices_batch = torch.LongTensor(indices_batch)
+
+	return indices_batch, mask_batch, max_target_len
 
 
 # don't write files
@@ -252,8 +285,6 @@ def test():
 	'''
 
 	cnn_activations = make_cnn_activations(image_names, image_dir, CNN_BATCH_SIZE)
-
-	
 	'''
 	cnn_activations: (N, C, W, H) tensor where
 	- N: number of images
@@ -264,22 +295,20 @@ def test():
 
 	# we now have complete training data in our variables
 
-	batch = sample_batch(cnn_activations, captions, BATCH_SIZE)
+	activation_batch, caption_batch_list = sample_batch(cnn_activations, captions, BATCH_SIZE)
 	'''
-	batch: list of pairs where for each pair,
-	first element: (1, C, W, H) activation
-	second element: single caption (not caption group)
+	activation_batch: (B, C, W, H)
+	caption_batch_list: list of captions (not caption groups)
 	'''
 
-
-
-	cnn_activation, caption, mask, max_target_len = batch_to_train_data(voc, batch)
+	caption_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
 	'''
-	cnn_activation: (B, C, W, H)
 	caption: (max_target_len, B)
 	mask: (max_target_len, B)
 	max_target_len: integer
 	'''
+	print(caption_batch)
+	print(mask_batch)
 
 
 def debug(caption_file):

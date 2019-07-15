@@ -3,7 +3,7 @@ Implementation of "Show, attend, and tell", paper by K. Xu et al.
 plan:
 - Read & normalize data: Done
 - Calculate CNN activations: Done
-- Make training batch
+- Make training batch: Done
 - Intermediate files
 - Toy data generator
 - Build model (soft attention)
