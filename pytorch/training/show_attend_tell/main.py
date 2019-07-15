@@ -3,6 +3,7 @@ import torchvision
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
+import random
 
 data_dir = "./data/flickr8k/"
 
@@ -34,7 +35,7 @@ BATCH_SIZE = 4
 IMG_SIZE = 224 # >= 224
 
 # DEBUG
-NUM_LINES = None
+NUM_LINES = 1000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -210,16 +211,31 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 		activations_list.append(activation.to("cpu"))
 
 	cnn_activations = torch.cat(activations_list, dim=0)
-	print(cnn_activations.shape)
+	print("activation shape: "+str(list(cnn_activations.shape)))
 
 	return cnn_activations
 
 
 def sample_batch(cnn_activations, captions, batch_size):
-	return None
+
+	batch_idx = np.random.randint(len(captions), size=batch_size)
+	activation_batch = cnn_activations[batch_idx]
+	caption_batch = []
+	for idx in batch_idx:
+		caption_group = captions[idx]
+		caption_batch.append(random.choice(caption_group))
+
+	batch = (activation_batch, caption_batch)
+	return batch
+
 
 def batch_to_train_data(voc, batch):
+
+	
+
 	return None, None, None, None
+
+
 
 # don't write files
 def test():
@@ -254,6 +270,8 @@ def test():
 	first element: (1, C, W, H) activation
 	second element: single caption (not caption group)
 	'''
+
+
 
 	cnn_activation, caption, mask, max_target_len = batch_to_train_data(voc, batch)
 	'''
