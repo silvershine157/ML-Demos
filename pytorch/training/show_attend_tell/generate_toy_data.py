@@ -9,12 +9,16 @@ MIN_L1_DIST = 30
 
 visual_dir = 'data/visual/'
 
+dataset_dir = 'data/toy_data/basic/'
+image_dir = dataset_dir + 'Images/'
+caption_file = dataset_dir + 'captions.txt'
+
 color = {
-	"black": (0, 0, 0, 255),
-	"red": (255, 0, 0, 255),
-	"green": (0, 255, 0, 255),
-	"blue": (0, 0, 255, 255),
-	"white": (255, 255, 255, 255)
+	"black": (0, 0, 0),
+	"red": (255, 0, 0),
+	"green": (0, 255, 0),
+	"blue": (0, 0, 255),
+	"white": (255, 255, 255)
 }
 
 def make_shapes():
@@ -103,7 +107,10 @@ class ToyDataGenerator(object):
 
 		names = self.make_names(n_samples)
 
+		print("Making data . . .")
 		for i in range(n_samples):
+			if(i%500 == 0):
+				print("(%d / %d)"%(i, n_samples))
 			n_obj = random.randint(self.min_obj, self.max_obj)
 			abstract_data = self.sample_abstract_data(n_obj)
 			transform = self.sample_transform(n_obj)
@@ -113,10 +120,12 @@ class ToyDataGenerator(object):
 		return images, names, captions
 
 	def make_names(self, n_samples):
+		# generate random image names
 		names = []
-		L = 8
+		L = 8 # random name length
 		for _ in range(n_samples):
 			s = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(L))
+			s = s + '.jpg'
 			names.append(s)
 		return names
 
@@ -184,7 +193,7 @@ class ToyDataGenerator(object):
 
 		positions, rotations, scales = transform # unpack
 
-		img = Image.new('RGBA', (SIZE, SIZE), color=color["black"])
+		img = Image.new('RGB', (SIZE, SIZE), color=color["black"])
 
 		for obj, pos, rot, scale in zip(abstract_data, positions, rotations, scales):
 			patch = shapes[obj["shape"]]
@@ -216,17 +225,29 @@ class ToyDataGenerator(object):
 					s = s + "and "
 				else:
 					s = s + ", "
+			s = s + "\n"
 			caption_group.append(s)
 
 		return caption_group
 
 # file IO
 
-def write_images():
-	pass
+def write_images(images, names):
+	for img, name in zip(images, names):
+		img.save(image_dir + name)
+	return
 
-def write_captions():
-	pass
+def write_captions(captions):
+
+	lines = []
+	for caption_group in captions:
+		for caption in caption_group:
+			lines.append(caption)
+
+	with open(caption_file, 'w') as f:
+		f.writelines(lines)
+
+	return
 
 
 def test():
@@ -238,14 +259,21 @@ def test():
 		max_obj = 4
 	)
 
-	images, names, captions = gen.make_data(10)
+	images, names, captions = gen.make_data(5000)
 
-	img = images[0]
-	img.save(visual_dir + "test_drawing.png")
-	print(names[0])
-	for cap in captions[0]:
-		print(cap)
+	print("Writing images . . .")
+	write_images(images, names)
+	print("Writing captions . . .")
+	write_captions(captions)
+	print("Done!")
 
+	#img = images[3]
+	#img.save(visual_dir + "test_drawing.png")
+	#print(names[3])
+	#for cap in captions[3]:
+	#	print(cap)
+
+	
 
 
 test()

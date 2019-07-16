@@ -6,27 +6,45 @@ from torch.utils.data import Dataset, DataLoader
 import random
 import itertools
 
-data_dir = "./data/flickr8k/"
+flickr8k_paths = {
+	"data_dir": "./data/flickr8k/",
+	"orig_caption_file": "Flickr_Data/Flickr_TextData/Flickr8k.lemma.token.txt",
+	"orig_image_dir": "Flickr_Data/Images/",
+	"intermediate_data_file": "processed/intermediate_data",
+	"cnn_activations_file": "processed/cnn_activations"
+}
+
+toy_data_basic_paths = {
+	"data_dir": "./data/toy_data/basic/",
+	"orig_caption_file": "captions.txt",
+	"orig_image_dir": "Images/",
+	"intermediate_data_file": "processed/intermediate_data",
+	"cnn_activations_file": "processed/cnn_activations"	
+}
+
+paths = toy_data_basic_paths
+
+data_dir = paths["data_dir"]
 
 # original data
-orig_caption_file = data_dir + "Flickr_Data/Flickr_TextData/Flickr8k.lemma.token.txt"
-orig_image_dir = data_dir + "Flickr_Data/Images/"
+orig_caption_file = data_dir + paths["orig_caption_file"]
+orig_image_dir = data_dir + paths["orig_image_dir"]
 
 # intermediate data
-new_intermediate_data = False
-intermediate_data_file = data_dir + "processed/intermediate_data"
+new_intermediate_data = True
+intermediate_data_file = data_dir + paths["intermediate_data_file"]
 
 # CNN activations
-new_cnn_activations = False
+new_cnn_activations = True
 CNN_BATCH_SIZE = 1024
-cnn_activations_file = data_dir + "processed/cnn_activations"
+cnn_activations_file = data_dir + paths["cnn_activations_file"]
 
 # minimum word count to be kept in voc
 # original paper fixes the vocabulary size to 10000
 MIN_WORD_COUNT = 3
 
 # maximum caption legnth (does not count <start>, <end>)
-MAX_CAPTION_LENGTH = 10
+MAX_CAPTION_LENGTH = 20
 
 BATCH_SIZE = 8
 
@@ -34,7 +52,7 @@ BATCH_SIZE = 8
 IMG_SIZE = 224 # >= 224
 
 # DEBUG
-NUM_LINES = 100
+NUM_LINES = None
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -99,7 +117,6 @@ def process_caption_file(caption_file, num_lines=None):
 	
 	# read caption file
 	with open(caption_file) as f:
-		_ = f.readline() # ignore first line
 		lines = f.readlines()
 		# mini data for debugging
 		if(num_lines):
@@ -121,8 +138,7 @@ def process_caption_file(caption_file, num_lines=None):
 
 		words = tokens[1:]
 		words = [word.lower() for word in words]
-
-		if(len(img_name) == 0 or img_name != img_name[-1]):
+		if(len(orig_image_names) == 0 or img_name != orig_image_names[-1]):
 			# new image
 			orig_image_names.append(img_name)
 			orig_captions.append([])

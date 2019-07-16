@@ -5,7 +5,7 @@ plan:
 - Calculate CNN activations: Done
 - Make training batch: Done
 - Intermediate files: Done
-- Toy data generator
+- Toy data generator: Done
 - Build model (soft attention)
 - Train with toy data
 - Train with real data
