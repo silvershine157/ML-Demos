@@ -1,6 +1,7 @@
 import numpy as np
 import torchvision
 import torch
+import torch.nn as nn
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import random
@@ -31,11 +32,11 @@ orig_caption_file = data_dir + paths["orig_caption_file"]
 orig_image_dir = data_dir + paths["orig_image_dir"]
 
 # intermediate data
-new_intermediate_data = True
+new_intermediate_data = False
 intermediate_data_file = data_dir + paths["intermediate_data_file"]
 
 # CNN activations
-new_cnn_activations = True
+new_cnn_activations = False
 CNN_BATCH_SIZE = 1024
 cnn_activations_file = data_dir + paths["cnn_activations_file"]
 
@@ -248,7 +249,7 @@ def sample_batch(cnn_activations, captions, batch_size):
 	return activation_batch, caption_batch_list
 
 def sentence_to_indices(voc, sentence):
-	return [START_token] + [voc.word2idx[word] for word in sentence] + [END_token]
+	return [voc.word2idx[word] for word in sentence] + [END_token]
 
 def zero_padding(indices_batch, fillvalue=PAD_token):
 	# implicitly transpose
@@ -327,6 +328,77 @@ def test_1():
 	return
 
 
+class InitStateMLP(nn.Module):
+
+	def __init__(self, a_dim, cell_dim):
+		super(InitStateMLP, self).__init__()
+
+		# dimensions
+		self.a_dim = a_dim # 'D'
+		self.cell_dim = cell_dim # 'n'
+
+		# layers
+		self.memory_init_mlp = None # 'f_init,c': n <- D
+		self.hidden_init_mlp = None # 'f_init,h': n <- D
+
+	def forward(self, annotations):
+
+		init_memory = None
+		init_hidden = None
+
+		return init_memory, init_hidden
+
+
+class SoftAttention(nn.Module):
+
+	def __init__(self, a_dim, a_size, cell_dim):
+		super(SoftAttention, self).__init__()
+
+		# dimensions
+		self.a_dim = a_dim # 'D'
+		self.a_size = a_size # 'L'
+		self.cell_dim = cell_dim # 'n'
+
+		# layers
+		self.scoring_mlp = None # 'f_att': scalar <- D + n
+
+
+	def forward(self, annotations, last_memory):
+
+		context = None
+
+		return context
+
+
+class ContextDecoder(nn.Module):
+
+	def __init__(self, voc_size, embedding_dim, cell_dim, a_dim):
+		super(ContextDecoder, self).__init__()
+
+		# dimensions
+		self.voc_size = voc_size # 'K'
+		self.embedding_dim = embedding_dim # 'm'
+		self.cell_dim = cell_dim # 'n'
+		self.a_dim = a_dim # 'D'
+
+		# layers
+		self.embedding_layer = None # 'E': m <- K
+		self.lstm_cell = None # input: D + m, cell dim: n
+		self.out_state_layer = None # 'L_h': m <- n
+		self.out_context_layer = None # 'L_z': m <- D
+		self.out_final_layer = None # 'L_o': K <- m
+
+	def forward(self, context, last_hidden, last_memory):
+
+		output = None
+		hidden = None
+
+		return output, hidden, memory
+
+
+def train():
+	pass
+
 
 def test_2():
 
@@ -345,7 +417,7 @@ def test_2():
 		cnn_activations = torch.load(cnn_activations_file)
 
 	# time to build model!
-	
+	print(cnn_activations.shape)
 
 
 def main():
