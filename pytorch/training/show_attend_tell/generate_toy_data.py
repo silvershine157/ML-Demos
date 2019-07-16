@@ -1,5 +1,5 @@
 import numpy
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageOps, ImageFilter
 import random
 
 SIZE = 224
@@ -10,8 +10,8 @@ visual_dir = 'data/visual/'
 color = {
 	"black": (0, 0, 0, 255),
 	"red": (255, 0, 0, 255),
-	"blue": (0, 255, 0, 255),
-	"green": (0, 0, 255, 255),
+	"green": (0, 255, 0, 255),
+	"blue": (0, 0, 255, 255),
 	"white": (255, 255, 255, 255)
 }
 
@@ -54,26 +54,26 @@ def make_shapes():
 
 shapes = make_shapes()
 
-'''
-(Config)
-parameters: shape used, color used, min # of obj, max # of obj
-	(max # of obj <= shape used)
-- complete combination: shape X color
-
-(Sample)
-random # of object
-random abstract data: list of (shape, color) (no duplicate)
-random transform
-- random position (not too close to each other)
-- random rotation
-- fluctulate scale
-
-(Generate)
-generate image from random abstract data, random transform
-generate caption from random abstract data
-'''
-
 class ToyDataGenerator(object):
+
+	'''
+	(Config)
+	parameters: shape used, color used, min # of obj, max # of obj
+		(max # of obj <= shape used)
+	- complete combination: shape X color
+
+	(Sample)
+	random # of object
+	random abstract data: list of (shape, color) (no duplicate)
+	random transform
+	- random position (not too close to each other)
+	- random rotation
+	- fluctulate scale
+
+	(Generate)
+	generate image from random abstract data, random transform
+	generate caption from random abstract data
+	'''
 
 	def __init__(self, shapes_used, color_used, min_obj=1, max_obj=4):
 
@@ -102,7 +102,7 @@ class ToyDataGenerator(object):
 			n_obj = random.randint(self.min_obj, self.max_obj)
 			abstract_data = self.sample_abstract_data(n_obj)
 			transform = self.sample_transform(n_obj)
-			#images.append(self.generate_image(abstract_data, transform))
+			images.append(self.generate_image(abstract_data, transform))
 			#captions.append(self.generate_caption(abstract_data))
 
 		return images, captions
@@ -131,6 +131,8 @@ class ToyDataGenerator(object):
 		give_up = 15
 		retry = 0
 		while retry < give_up:
+
+			# sample new positions
 			positions = []
 			for _ in range(n_obj):
 				x = random.randint(pad, SIZE-pad)
@@ -141,19 +143,15 @@ class ToyDataGenerator(object):
 			valid = True
 			for i in range(n_obj):
 				for j in range(n_obj):
-
 					if(i == j):
 						continue
 					p1 = positions[i]
 					p2 = positions[j]
-
 					if abs(p1[0] - p2[0]) + abs(p1[1] - p2[1]) < MIN_L1_DIST:
 						valid = False
 						break
-
 				if(not valid):
 					break
-
 			if valid:
 				break
 			else:
@@ -168,6 +166,25 @@ class ToyDataGenerator(object):
 		transform = (positions, rotations, scales) # pack
 
 		return transform
+
+	def generate_image(self, abstract_data, transform, blur=True):
+
+		positions, rotations, scales = transform # unpack
+
+		img = Image.new('RGBA', (SIZE, SIZE), color=color["black"])
+
+		for obj, pos, rot, scale in zip(abstract_data, positions, rotations, scales):
+			patch = shapes[obj["shape"]]
+			patch = patch.rotate(rot, expand=True)
+			new_size = int(scale * (patch.size)[0])
+			patch = patch.resize((new_size, new_size))
+			img.paste(ImageOps.colorize(patch, color["black"], color[obj["color"]]), (pos[0]-new_size//2, pos[1]-new_size//2), patch)
+
+		# blur image
+		if blur:
+			img = img.filter(ImageFilter.BoxBlur(2))
+
+		return img
 
 
 # file IO
@@ -190,8 +207,9 @@ def test():
 
 	images, captions = gen.make_data(10)
 
+	img = images[0]
 
-	#img.save(visual_dir + "test_drawing.png")
+	img.save(visual_dir + "test_drawing.png")
 
 
 
