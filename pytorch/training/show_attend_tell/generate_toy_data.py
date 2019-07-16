@@ -1,6 +1,8 @@
 import numpy
 from PIL import Image, ImageDraw, ImageOps, ImageFilter
 import random
+import datetime
+import string
 
 SIZE = 224
 MIN_L1_DIST = 30
@@ -93,19 +95,30 @@ class ToyDataGenerator(object):
 		self.min_obj = min_obj
 		self.max_obj = max_obj
 
+
 	def make_data(self, n_samples):
 
 		images = []
 		captions = []
 
-		for _ in range(n_samples):
+		names = self.make_names(n_samples)
+
+		for i in range(n_samples):
 			n_obj = random.randint(self.min_obj, self.max_obj)
 			abstract_data = self.sample_abstract_data(n_obj)
 			transform = self.sample_transform(n_obj)
 			images.append(self.generate_image(abstract_data, transform))
-			#captions.append(self.generate_caption(abstract_data))
+			captions.append(self.generate_caption_group(abstract_data, names[i]))
 
-		return images, captions
+		return images, names, captions
+
+	def make_names(self, n_samples):
+		names = []
+		L = 8
+		for _ in range(n_samples):
+			s = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(L))
+			names.append(s)
+		return names
 
 	def sample_abstract_data(self, n_obj):
 
@@ -187,6 +200,26 @@ class ToyDataGenerator(object):
 		return img
 
 
+	def generate_caption_group(self, abstract_data, name, n=5):
+
+		# generate 5 captions (may be duplicate)
+		caption_group = []
+		for i in range(n):
+			s = name + "#" + str(i) + "\t"
+			random.shuffle(abstract_data)
+			for j, obj in enumerate(abstract_data):
+				s = s + obj["color"] + " "
+				s = s + obj["shape"] + " "
+				if j == len(abstract_data)-1:
+					s = s + "."
+				elif j == len(abstract_data)-2:
+					s = s + "and "
+				else:
+					s = s + ", "
+			caption_group.append(s)
+
+		return caption_group
+
 # file IO
 
 def write_images():
@@ -205,11 +238,13 @@ def test():
 		max_obj = 4
 	)
 
-	images, captions = gen.make_data(10)
+	images, names, captions = gen.make_data(10)
 
 	img = images[0]
-
 	img.save(visual_dir + "test_drawing.png")
+	print(names[0])
+	for cap in captions[0]:
+		print(cap)
 
 
 
