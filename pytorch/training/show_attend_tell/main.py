@@ -300,18 +300,18 @@ def test_1():
 
 	cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
 	'''
-	cnn_activations: (N, C, W, H) tensor where
+	cnn_activations: (N, D, W, H) tensor where
 	- N: number of images
 	- W: horizontal spatial dimension
 	- H: vertical spatial dimension
-	- C: numver of output channels (not color)
+	- D: feature dimension (not color)
 	'''
 
 	# we now have complete training data in our variables
 
 	activation_batch, caption_batch_list = sample_batch(cnn_activations, captions, BATCH_SIZE)
 	'''
-	activation_batch: (B, C, W, H)
+	activation_batch: (B, D, W, H)
 	caption_batch_list: list of captions (not caption groups)
 	'''
 
@@ -374,19 +374,36 @@ class SoftAttention(nn.Module):
 
 		#'f_att': scalar <- D + n
 		self.scoring_mlp = nn.Sequential(
-			nn.Linear(100, self.a_dim + self.cell_dim),
+			nn.Linear(self.a_dim + self.cell_dim, 100),
 			nn.ReLU(),
-			nn.Linear(1, 100)
+			nn.Linear(100, 1)
 		)
+
+		self.softmax = nn.Softmax(dim=1)
 
 	def forward(self, annotations, last_memory):
 
-		context = None
-		scores = None # also output for doubly stochastic attn
+		# annotations: (B, D, L)
+		# last_memory: (B, n)
 
-		# stack last_memory, and flatten as B * L annotations?
+		# (B, n, L)
+		expanded = last_memory.unsqueeze(dim=2).expand((-1, -1, self.a_size))
+		
+		# (B, D+n, L)
+		anno_and_mem = torch.cat((annotations, expanded), dim=1)
+		
+		# (B, L, D+n)
+		anno_and_mem = anno_and_mem.transpose(1, 2)
 
-		return context, scores
+		# (B, L)
+		scores = self.scoring_mlp(anno_and_mem).squeeze()
+		attn_weights = self.softmax(scores)
+
+		# (B, D)
+		context = torch.einsum('bdl,bl->bd', annotations, attn_weights)
+
+		# also return weights to enable doubly stochastic attn
+		return context, attn_weights
 
 
 class ContextDecoder(nn.Module):
@@ -407,10 +424,14 @@ class ContextDecoder(nn.Module):
 		self.out_context_layer = None # 'L_z': m <- D
 		self.out_final_layer = None # 'L_o': K <- m
 
+
 	def forward(self, context, last_hidden, last_memory):
 
 		output = None
 		hidden = None
+
+
+		
 
 		return output, hidden, memory
 
