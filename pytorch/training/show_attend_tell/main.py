@@ -507,7 +507,6 @@ def test_2():
 	else:
 		cnn_activations = torch.load(cnn_activations_file)
 
-
 	# dimensions
 	cell_dim = 100
 	embedding_dim = 200
@@ -643,29 +642,12 @@ def test_3():
 	## Train
 
 	# train settings
-	n_iteration = 1000
+	n_iteration = 10
 	learning_rate = 0.001
 	clip = 50.0
 
-	# set to train mode
-	model.train()
+	train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip)
 
-	# build optimizers
-	opt = optim.Adam(model.parameters(), lr=learning_rate)
-
-	# load batches for each iteration
-	# TODO: use Dataset, DataLoader class?
-	training_batches = [sample_batch(cnn_activations, captions, voc, BATCH_SIZE) for _ in range(n_iteration)]
-
-	iteration = 0
-
-	for iteration in range(n_iteration):
-		opt.zero_grad()
-		loss, norm_loss = model(training_batches[iteration])
-		loss.backward()
-		_ = nn.utils.clip_grad_norm_(model.parameters(), clip)
-		opt.step()
-		print(norm_loss)
 
 
 def test_4():
@@ -696,6 +678,29 @@ def test_4():
 	interactive_test(model, orig_image_dir, voc)
 
 
+def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip):
+	# set to train mode
+	model.train()
+
+	# build optimizers
+	opt = optim.Adam(model.parameters(), lr=learning_rate)
+
+	# load batches for each iteration
+	# TODO: use Dataset, DataLoader class?
+	training_batches = [sample_batch(cnn_activations, captions, voc, BATCH_SIZE) for _ in range(n_iteration)]
+
+	iteration = 0
+
+	for iteration in range(n_iteration):
+		opt.zero_grad()
+		loss, norm_loss = model(training_batches[iteration])
+		loss.backward()
+		_ = nn.utils.clip_grad_norm_(model.parameters(), clip)
+		opt.step()
+		print(norm_loss)
+	pass
+
+
 def tokens_to_str(tokens, voc):
 
 	L = [voc.idx2word[token] for token in tokens.numpy()]
@@ -720,12 +725,46 @@ def interactive_test(model, image_dir, voc):
 		print(tokens_to_str(all_tokens[0], voc))
 
 
-def main():
-	# TODO
-	pass
+def test_5():
+
+	# config
+	train = True
+	ckpt_file = None
+	ell_dim = 100
+	embedding_dim = 200
+	n_iteration = 10
+	learning_rate = 0.001
+	clip = 50.0
+
+	# get voc, captions, image_names
+	if new_intermediate_data:
+		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
+		torch.save((voc, captions, image_names), intermediate_data_file)
+	else:
+		voc, captions, image_names = torch.load(intermediate_data_file)
+
+	# get cnn activations
+	if new_cnn_activations:
+		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
+		torch.save(cnn_activations, cnn_activations_file)
+	else:
+		cnn_activations = torch.load(cnn_activations_file)
+
+	# load / build model
+	if ckpt_file:
+		model = None
+	else:
+		voc_size = voc.num_words
+		_, a_dim, a_W, a_H = list(cnn_activations.shape)
+		model = SoftSATModel(a_dim, a_W * a_H, voc_size, embedding_dim, cell_dim)
+
+	if train:
+		train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip)
+
+	interactive_test(model, orig_image_dir, voc)
 
 
-test_4()
+test_3()
 
 
 
