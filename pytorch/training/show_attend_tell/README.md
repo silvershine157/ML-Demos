@@ -6,7 +6,7 @@ plan:
 - Make training batch: Done
 - Intermediate files: Done
 - Toy data generator: Done
-- Build model (soft attention)
+- Build model (soft attention): Done
 - Train with toy data
 - Train with real data
 - (optional) stochastic hard attention

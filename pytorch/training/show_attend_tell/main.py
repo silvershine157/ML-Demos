@@ -573,7 +573,6 @@ class SoftSATModel(nn.Module):
 
 		# TODO: doubly stochastic attention
 
-
 		return loss, sum(rectified_losses)/n_total
 
 
@@ -612,9 +611,9 @@ def test_3():
 
 	## Train
 
-	# training hyperparameters
+	# train settings
+	n_iteration = 1000
 	learning_rate = 0.001
-	n_iteration = 10
 	clip = 50.0
 
 	# set to train mode
@@ -635,6 +634,7 @@ def test_3():
 		loss.backward()
 		_ = nn.utils.clip_grad_norm_(model.parameters(), clip)
 		opt.step()
+		print(norm_loss)
 
 
 def main():
