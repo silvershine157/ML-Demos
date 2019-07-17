@@ -2,6 +2,7 @@ import numpy as np
 import torchvision
 import torch
 import torch.nn as nn
+from torch import optim
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import random
@@ -237,16 +238,20 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 	return cnn_activations
 
 
-def sample_batch(cnn_activations, captions, batch_size):
+def sample_batch(cnn_activations, captions, voc, batch_size):
 
 	batch_idx = np.random.randint(len(captions), size=batch_size)
-	activation_batch = cnn_activations[batch_idx]
+	_, a_dim, a_W, a_H = list(cnn_activations.shape)
+	a_size = a_W * a_H
+	annotation_batch = cnn_activations[batch_idx].view((-1, a_dim, a_size))
 	caption_batch_list = []
 	for idx in batch_idx:
 		caption_group = captions[idx]
 		caption_batch_list.append(random.choice(caption_group))
 
-	return activation_batch, caption_batch_list
+	indices_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
+
+	return annotation_batch, indices_batch, mask_batch, max_target_len
 
 def sentence_to_indices(voc, sentence):
 	return [voc.word2idx[word] for word in sentence] + [END_token]
@@ -309,16 +314,11 @@ def test_1():
 
 	# we now have complete training data in our variables
 
-	activation_batch, caption_batch_list = sample_batch(cnn_activations, captions, BATCH_SIZE)
+	annotation_batch, caption_batch, mask_batch, max_target_len = sample_batch(cnn_activations, captions, voc, BATCH_SIZE)
 	'''
-	activation_batch: (B, D, W, H)
-	caption_batch_list: list of captions (not caption groups)
-	'''
-
-	caption_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
-	'''
-	caption: (max_target_len, B)
-	mask: (max_target_len, B)
+	annotation_batch: (B, D, W, H)
+	caption_batch: (max_target_len, B)
+	mask_batch: (max_target_len, B)
 	max_target_len: integer
 	'''
 
@@ -503,58 +503,146 @@ def test_2():
 	_, a_dim, a_W, a_H = list(cnn_activations.shape)
 	a_size = a_W * a_H
 	
-	# initialize modules
-	init_mlp = InitStateMLP(a_dim, cell_dim)
-	soft_attn = SoftAttention(a_dim, a_size, cell_dim)
-	decoder = ContextDecoder(voc_size, embedding_dim, cell_dim, a_dim)
+	# initialize model
+	model = SoftSATModel(a_dim, a_size, voc_size, embedding_dim, cell_dim)
 
 	# prepare data
-	activation_batch, caption_batch_list = sample_batch(cnn_activations, captions, BATCH_SIZE)
-	caption_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
-	anno = activation_batch.view((-1, a_dim, a_size))
-	# caption_batch: (max_target_len, B)
-	# anno: (B, D, L)
-
-	# forward pass
-
-	# initialize
-	init_memory, init_hidden = init_mlp(anno)	
-	decoder_memory = init_memory
-	decoder_hidden = init_hidden
-	decoder_input = torch.LongTensor([[START_token for _ in range(BATCH_SIZE)]])
-	loss = 0.0
-
-	# trough time
-	use_teacher_forcing = True
-	if use_teacher_forcing:
-		for t in range(max_target_len):
-			# get context vector
-			context, attn_weights = soft_attn(anno, decoder_memory)
-
-			# decoder forward
-			probs, decoder_hidden, decoder_memory = decoder(
-				context, decoder_input, decoder_hidden, decoder_memory
-			)
-
-			# teacher forcing
-			# (1, B)
-			decoder_input = caption_batch[t].view(1, -1)
-
-			mask_loss, nTotal = maskNLLLoss(probs, caption_batch[t], mask_batch[t])
-			loss += mask_loss
-	else:
-		print("Greedy decoding not yet implemented")
-		return
-
+	batch = sample_batch(cnn_activations, captions, voc, BATCH_SIZE)
 	
+	# forward pass
+	loss, normalized_loss = model(batch)
+
+
+
+class SoftSATModel(nn.Module):
+
+	def __init__(self, a_dim, a_size, voc_size, embedding_dim, cell_dim):
+		super(SoftSATModel, self).__init__()
+
+		# dimensions
+		self.a_dim = a_dim
+		self.a_size = a_size
+		self.voc_size = voc_size
+		self.embedding_dim = embedding_dim
+		self.cell_dim = cell_dim
+
+		# submodules
+		self.init_mlp = InitStateMLP(self.a_dim, self.cell_dim)
+		self.soft_attn = SoftAttention(self.a_dim, self.a_size, self.cell_dim)
+		self.decoder = ContextDecoder(self.voc_size, self.embedding_dim, self.cell_dim, self.a_dim)
+
+
+	def forward(self, batch):
+		annotation_batch, caption_batch, mask_batch, max_target_len = batch
+		# caption_batch: (max_target_len, B)
+		# annotation_batch: (B, D, L)
+		batch_size = annotation_batch.size(0)
+
+		# initialize
+		init_memory, init_hidden = self.init_mlp(annotation_batch)	
+		decoder_memory = init_memory
+		decoder_hidden = init_hidden
+		decoder_input = torch.LongTensor([[START_token for _ in range(batch_size)]])
+		loss = 0.0
+		rectified_losses = []
+		n_total = 0
+
+		# trough time
+		use_teacher_forcing = True
+		if use_teacher_forcing:
+			for t in range(max_target_len):
+				# get context vector
+				context, attn_weights = self.soft_attn(annotation_batch, decoder_memory)
+
+				# decoder forward
+				probs, decoder_hidden, decoder_memory = self.decoder(
+					context, decoder_input, decoder_hidden, decoder_memory
+				)
+
+				# teacher forcing
+				# (1, B)
+				decoder_input = caption_batch[t].view(1, -1)
+
+				mask_loss, nTotal = maskNLLLoss(probs, caption_batch[t], mask_batch[t])
+				loss += mask_loss
+				n_total += nTotal
+				rectified_losses.append(mask_loss.item() * nTotal)
+		else:
+			print("Greedy decoding not yet implemented")
+			return
+
+		# TODO: doubly stochastic attention
+
+
+		return loss, sum(rectified_losses)/n_total
+
+
+	def greedy_decoder(self, annotations):
+
+		words = None
+
+		return words
+
+
+def test_3():
+
+	# get voc, captions, image_names
+	if new_intermediate_data:
+		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
+		torch.save((voc, captions, image_names), intermediate_data_file)
+	else:
+		voc, captions, image_names = torch.load(intermediate_data_file)
+
+	# get cnn activations
+	if new_cnn_activations:
+		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
+		torch.save(cnn_activations, cnn_activations_file)
+	else:
+		cnn_activations = torch.load(cnn_activations_file)
+
+	# model dimensions
+	cell_dim = 100
+	embedding_dim = 200
+	voc_size = voc.num_words
+	_, a_dim, a_W, a_H = list(cnn_activations.shape)
+	a_size = a_W * a_H
+	
+	# build model
+	model = SoftSATModel(a_dim, a_size, voc_size, embedding_dim, cell_dim)
+
+	## Train
+
+	# training hyperparameters
+	learning_rate = 0.001
+	n_iteration = 10
+	clip = 50.0
+
+	# set to train mode
+	model.train()
+
+	# build optimizers
+	opt = optim.Adam(model.parameters(), lr=learning_rate)
+
+	# load batches for each iteration
+	# TODO: use Dataset, DataLoader class?
+	training_batches = [sample_batch(cnn_activations, captions, voc, BATCH_SIZE) for _ in range(n_iteration)]
+
+	iteration = 0
+
+	for iteration in range(n_iteration):
+		opt.zero_grad()
+		loss, norm_loss = model(training_batches[iteration])
+		loss.backward()
+		_ = nn.utils.clip_grad_norm_(model.parameters(), clip)
+		opt.step()
 
 
 def main():
 	# TODO
 	pass
 
-#debug(caption_file)
-test_2()
+
+test_3()
 
 
 
