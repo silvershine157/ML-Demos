@@ -338,13 +338,24 @@ class InitStateMLP(nn.Module):
 		self.cell_dim = cell_dim # 'n'
 
 		# layers
-		self.memory_init_mlp = None # 'f_init,c': n <- D
-		self.hidden_init_mlp = None # 'f_init,h': n <- D
+
+		# 'f_init,c': n <- D
+		# 'f_init,h': n <- D
+		self.init_mlp = nn.Sequential(
+			nn.Linear(self.a_dim, 200),
+			nn.ReLU(),
+			nn.Linear(200, 2 * self.cell_dim)
+		)
 
 	def forward(self, annotations):
 
 		init_memory = None
 		init_hidden = None
+
+		avg_anno = annotations.mean(2) # average spatially
+		out = self.init_mlp(avg_anno)
+		init_memory = out[:, :self.cell_dim]
+		init_hidden = out[:, self.cell_dim:]
 
 		return init_memory, init_hidden
 
@@ -360,14 +371,22 @@ class SoftAttention(nn.Module):
 		self.cell_dim = cell_dim # 'n'
 
 		# layers
-		self.scoring_mlp = None # 'f_att': scalar <- D + n
 
+		#'f_att': scalar <- D + n
+		self.scoring_mlp = nn.Sequential(
+			nn.Linear(100, self.a_dim + self.cell_dim),
+			nn.ReLU(),
+			nn.Linear(1, 100)
+		)
 
 	def forward(self, annotations, last_memory):
 
 		context = None
+		scores = None # also output for doubly stochastic attn
 
-		return context
+		# stack last_memory, and flatten as B * L annotations?
+
+		return context, scores
 
 
 class ContextDecoder(nn.Module):
@@ -416,8 +435,38 @@ def test_2():
 	else:
 		cnn_activations = torch.load(cnn_activations_file)
 
+
 	# time to build model!
-	print(cnn_activations.shape)
+
+	activation_batch, caption_batch_list = sample_batch(cnn_activations, captions, BATCH_SIZE)
+	caption_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
+
+	cell_dim = 100
+	_, a_dim, a_W, a_H = list(activation_batch.shape)
+	a_size = a_W * a_H
+	anno = activation_batch.view((-1, a_dim, a_size))
+	
+	init_mlp = InitStateMLP(a_dim, cell_dim)
+
+	init_memory, init_hidden = init_mlp(anno)
+	soft_attn = SoftAttention(a_dim, a_size, cell_dim)
+
+	decoder_memory = init_memory
+	decoder_hidden = init_hidden
+
+	context = soft_attn(anno, decoder_memory)
+	
+	for t in range(max_target_len):
+		# get context vector
+		#context = soft_attn(anno, decoder_memory)
+
+
+		'''
+		# decoder forward
+		decoder_output, decoder_hidden, decoder_memory = decoder(
+
+		)
+		'''
 
 
 def main():
