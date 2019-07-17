@@ -202,7 +202,11 @@ class ImageDataset(Dataset):
 def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 
 	# inspired by pytorch transfer learning tutorial
-	print("Extracting CNN features . . .")
+
+	single = (len(image_names)==1)
+
+	if not single:
+		print("Extracting CNN features . . .")
 	cnn_activations = None
 
 	# normalizing transforation
@@ -220,30 +224,38 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 	for param in cnn_model.parameters():
 		param.requires_grad = False
 	cnn_extractor = torch.nn.Sequential(*list(cnn_model.children())[:-2])
-	cnn_extractor = cnn_extractor.to(device)
 
+	if not single:
+		cnn_extractor = cnn_extractor.to(device)
 
 	dataloader = DataLoader(img_dataset, batch_size=cnn_batch_size, shuffle=False)
 	activations_list = []
 
 	for i_batch, batch in enumerate(dataloader):
-		print("( %d / %d )"%(i_batch * cnn_batch_size, len(image_names)))
-		batch = batch.to(device)
+		if not single:
+			print("( %d / %d )"%(i_batch * cnn_batch_size, len(image_names)))
+			batch = batch.to(device)
 		activation = cnn_extractor(batch)
-		activations_list.append(activation.to("cpu"))
+		if not single:
+			activation = activation.to("cpu")
+		activations_list.append(activation)
 
 	cnn_activations = torch.cat(activations_list, dim=0)
-	print("activation shape: "+str(list(cnn_activations.shape)))
+	if not single:
+		print("activation shape: "+str(list(cnn_activations.shape)))
 
 	return cnn_activations
 
+def flat_annotations(cnn_activations):
+	_, a_dim, a_W, a_H = list(cnn_activations.shape)
+	a_size = a_W * a_H
+	annotations = cnn_activations.view((-1, a_dim, a_size))
+	return annotations
 
 def sample_batch(cnn_activations, captions, voc, batch_size):
 
 	batch_idx = np.random.randint(len(captions), size=batch_size)
-	_, a_dim, a_W, a_H = list(cnn_activations.shape)
-	a_size = a_W * a_H
-	annotation_batch = cnn_activations[batch_idx].view((-1, a_dim, a_size))
+	annotation_batch = flat_annotations(cnn_activations[batch_idx])
 	caption_batch_list = []
 	for idx in batch_idx:
 		caption_group = captions[idx]
@@ -395,7 +407,7 @@ class SoftAttention(nn.Module):
 		anno_and_mem = anno_and_mem.transpose(1, 2)
 
 		# (B, L)
-		scores = self.scoring_mlp(anno_and_mem).squeeze()
+		scores = self.scoring_mlp(anno_and_mem).squeeze(dim=2)
 		attn_weights = self.softmax(scores)
 
 		# (B, D)
@@ -576,11 +588,30 @@ class SoftSATModel(nn.Module):
 		return loss, sum(rectified_losses)/n_total
 
 
-	def greedy_decoder(self, annotations):
+	def greedy_decoder(self, annotation_batch, max_len):
 
-		words = None
+		# initialize
+		init_memory, init_hidden = self.init_mlp(annotation_batch)	
+		decoder_memory = init_memory
+		decoder_hidden = init_hidden
+		batch_size = annotation_batch.size(0)
+		decoder_input = torch.LongTensor([[START_token for _ in range(batch_size)]])
+		all_tokens = torch.zeros([0], dtype=torch.long)
 
-		return words
+		# greedy decoding
+		for _ in range(max_len):
+			context, attn_weights = self.soft_attn(annotation_batch, decoder_memory)
+			probs, decoder_hidden, decoder_memory = self.decoder(
+				context, decoder_input, decoder_hidden, decoder_memory
+			)
+			_, decoder_input = torch.max(probs, dim=1)
+			decoder_input = torch.unsqueeze(decoder_input, 0)
+			all_tokens = torch.cat((all_tokens, decoder_input), dim=0)
+
+		# (max_len, B)
+		all_tokens = all_tokens.transpose(0, 1)
+
+		return all_tokens
 
 
 def test_3():
@@ -637,12 +668,64 @@ def test_3():
 		print(norm_loss)
 
 
+def test_4():
+	# get voc, captions, image_names
+	if new_intermediate_data:
+		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
+		torch.save((voc, captions, image_names), intermediate_data_file)
+	else:
+		voc, captions, image_names = torch.load(intermediate_data_file)
+
+	# get cnn activations
+	if new_cnn_activations:
+		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
+		torch.save(cnn_activations, cnn_activations_file)
+	else:
+		cnn_activations = torch.load(cnn_activations_file)
+
+	# model dimensions
+	cell_dim = 100
+	embedding_dim = 200
+	voc_size = voc.num_words
+	_, a_dim, a_W, a_H = list(cnn_activations.shape)
+	a_size = a_W * a_H
+	
+	# build model
+	model = SoftSATModel(a_dim, a_size, voc_size, embedding_dim, cell_dim)
+
+	interactive_test(model, orig_image_dir, voc)
+
+
+def tokens_to_str(tokens, voc):
+
+	L = [voc.idx2word[token] for token in tokens.numpy()]
+	return ' '.join(L)
+
+
+def interactive_test(model, image_dir, voc):
+
+	while True:
+		q = input("image name:")
+		if q == 'quit':
+			return
+
+		# make annotation for image q
+		cnn_activations = make_cnn_activations([q], image_dir, 1)
+		annotation = flat_annotations(cnn_activations)
+
+		# perform greedy decoding
+		all_tokens = model.greedy_decoder(annotation, 10)
+
+		# print result
+		print(tokens_to_str(all_tokens[0], voc))
+
+
 def main():
 	# TODO
 	pass
 
 
-test_3()
+test_4()
 
 
 
