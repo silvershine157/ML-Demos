@@ -349,13 +349,12 @@ class InitStateMLP(nn.Module):
 
 	def forward(self, annotations):
 
-		init_memory = None
-		init_hidden = None
-
 		avg_anno = annotations.mean(2) # average spatially
 		out = self.init_mlp(avg_anno)
-		init_memory = out[:, :self.cell_dim]
-		init_hidden = out[:, self.cell_dim:]
+
+		# (1, B, n)
+		init_memory = out[:, :self.cell_dim].unsqueeze(dim=0)
+		init_hidden = out[:, self.cell_dim:].unsqueeze(dim=0)
 
 		return init_memory, init_hidden
 
@@ -384,11 +383,11 @@ class SoftAttention(nn.Module):
 	def forward(self, annotations, last_memory):
 
 		# annotations: (B, D, L)
-		# last_memory: (B, n)
+		# last_memory: (1, B, n)
 
 		# (B, n, L)
-		expanded = last_memory.unsqueeze(dim=2).expand((-1, -1, self.a_size))
-		
+		expanded = last_memory.squeeze(dim=0).unsqueeze(dim=2).expand((-1, -1, self.a_size))
+
 		# (B, D+n, L)
 		anno_and_mem = torch.cat((annotations, expanded), dim=1)
 		
@@ -418,26 +417,66 @@ class ContextDecoder(nn.Module):
 		self.a_dim = a_dim # 'D'
 
 		# layers
-		self.embedding_layer = None # 'E': m <- K
-		self.lstm_cell = None # input: D + m, cell dim: n
-		self.out_state_layer = None # 'L_h': m <- n
-		self.out_context_layer = None # 'L_z': m <- D
-		self.out_final_layer = None # 'L_o': K <- m
+
+		# 'E': m <- K
+		self.embedding_layer = nn.Embedding(self.voc_size, self.embedding_dim)
+
+		# input: D + m, cell dim: n
+		self.lstm_cell = nn.LSTM(self.a_dim + self.embedding_dim, self.cell_dim)
+
+		# 'L_h': m <- n
+		self.out_state_layer = nn.Linear(self.cell_dim, self.embedding_dim)
+
+		# 'L_z': m <- D
+		self.out_context_layer = nn.Linear(self.a_dim, self.embedding_dim)
+
+		# 'L_o': K <- m
+		self.out_final_layer = nn.Linear(self.embedding_dim, self.voc_size)
+		self.out_softmax = nn.Softmax(dim=1)
 
 
-	def forward(self, context, last_hidden, last_memory):
+	def forward(self, context, input_word, last_hidden, last_memory):
 
-		output = None
-		hidden = None
+		# (1, B, D)
+		context = context.unsqueeze(dim=0)
 
+		# (1, B, m)
+		embedded = self.embedding_layer(input_word)
 
+		# (1, B, m + D)
+		cell_input = torch.cat((context, embedded), dim=2)
 		
+		_, (hidden, memory) = self.lstm_cell(cell_input, (last_hidden, last_memory))
+		# hidden: (1, B, n)
+		# memory: (1, B, n)
+		# output is same as hidden for single-step computation
 
-		return output, hidden, memory
+		# (1, B, m)
+		out_src = embedded + self.out_state_layer(hidden) + self.out_context_layer(context)
+		
+		# (B, K)
+		out_scores = self.out_final_layer(out_src).squeeze(0)
+		probs = self.out_softmax(out_scores)
+
+		return probs, hidden, memory
 
 
 def train():
 	pass
+
+def maskNLLLoss(probs, target, mask):
+
+	# probs: (B, K)
+	# target: (1, B)
+	# mask: (1, B)
+
+	nTotal = mask.sum()
+
+	crossEntropy = -torch.log(torch.gather(probs, 1, target.view(-1, 1)).squeeze(1))
+
+	loss = crossEntropy.masked_select(mask).mean()
+
+	return loss, nTotal.item()
 
 
 def test_2():
@@ -457,37 +496,57 @@ def test_2():
 		cnn_activations = torch.load(cnn_activations_file)
 
 
-	# time to build model!
+	# dimensions
+	cell_dim = 100
+	embedding_dim = 200
+	voc_size = voc.num_words
+	_, a_dim, a_W, a_H = list(cnn_activations.shape)
+	a_size = a_W * a_H
+	
+	# initialize modules
+	init_mlp = InitStateMLP(a_dim, cell_dim)
+	soft_attn = SoftAttention(a_dim, a_size, cell_dim)
+	decoder = ContextDecoder(voc_size, embedding_dim, cell_dim, a_dim)
 
+	# prepare data
 	activation_batch, caption_batch_list = sample_batch(cnn_activations, captions, BATCH_SIZE)
 	caption_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
-
-	cell_dim = 100
-	_, a_dim, a_W, a_H = list(activation_batch.shape)
-	a_size = a_W * a_H
 	anno = activation_batch.view((-1, a_dim, a_size))
-	
-	init_mlp = InitStateMLP(a_dim, cell_dim)
+	# caption_batch: (max_target_len, B)
+	# anno: (B, D, L)
 
-	init_memory, init_hidden = init_mlp(anno)
-	soft_attn = SoftAttention(a_dim, a_size, cell_dim)
+	# forward pass
 
+	# initialize
+	init_memory, init_hidden = init_mlp(anno)	
 	decoder_memory = init_memory
 	decoder_hidden = init_hidden
+	decoder_input = torch.LongTensor([[START_token for _ in range(BATCH_SIZE)]])
+	loss = 0.0
 
-	context = soft_attn(anno, decoder_memory)
+	# trough time
+	use_teacher_forcing = True
+	if use_teacher_forcing:
+		for t in range(max_target_len):
+			# get context vector
+			context, attn_weights = soft_attn(anno, decoder_memory)
+
+			# decoder forward
+			probs, decoder_hidden, decoder_memory = decoder(
+				context, decoder_input, decoder_hidden, decoder_memory
+			)
+
+			# teacher forcing
+			# (1, B)
+			decoder_input = caption_batch[t].view(1, -1)
+
+			mask_loss, nTotal = maskNLLLoss(probs, caption_batch[t], mask_batch[t])
+			loss += mask_loss
+	else:
+		print("Greedy decoding not yet implemented")
+		return
+
 	
-	for t in range(max_target_len):
-		# get context vector
-		#context = soft_attn(anno, decoder_memory)
-
-
-		'''
-		# decoder forward
-		decoder_output, decoder_hidden, decoder_memory = decoder(
-
-		)
-		'''
 
 
 def main():
