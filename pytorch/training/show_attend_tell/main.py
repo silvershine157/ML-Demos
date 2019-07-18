@@ -24,7 +24,7 @@ toy_data_basic_paths = {
 	"cnn_activations_file": "processed/cnn_activations"	
 }
 
-paths = toy_data_basic_paths
+paths = flickr8k_paths
 
 data_dir = paths["data_dir"]
 
@@ -48,7 +48,7 @@ MIN_WORD_COUNT = 3
 # maximum caption legnth (does not count <start>, <end>)
 MAX_CAPTION_LENGTH = 20
 
-BATCH_SIZE = 8
+BATCH_SIZE = 64
 
 # resizing
 IMG_SIZE = 224 # >= 224
@@ -457,7 +457,10 @@ class ContextDecoder(nn.Module):
 
 		# (1, B, m + D)
 		cell_input = torch.cat((context, embedded), dim=2)
-		
+
+		last_hidden = last_hidden.contiguous()
+		last_memory = last_memory.contiguous()
+
 		_, (hidden, memory) = self.lstm_cell(cell_input, (last_hidden, last_memory))
 		# hidden: (1, B, n)
 		# memory: (1, B, n)
@@ -487,6 +490,7 @@ def maskNLLLoss(probs, target, mask):
 	crossEntropy = -torch.log(torch.gather(probs, 1, target.view(-1, 1)).squeeze(1))
 
 	loss = crossEntropy.masked_select(mask).mean()
+	loss = loss.to(device)
 
 	return loss, nTotal.item()
 
@@ -549,11 +553,16 @@ class SoftSATModel(nn.Module):
 		# annotation_batch: (B, D, L)
 		batch_size = annotation_batch.size(0)
 
+		annotation_batch = annotation_batch.to(device)
+		caption_batch = caption_batch.to(device)
+		mask_batch = mask_batch.to(device)
+
 		# initialize
 		init_memory, init_hidden = self.init_mlp(annotation_batch)	
 		decoder_memory = init_memory
 		decoder_hidden = init_hidden
 		decoder_input = torch.LongTensor([[START_token for _ in range(batch_size)]])
+		decoder_input = decoder_input.to(device)
 		loss = 0.0
 		rectified_losses = []
 		n_total = 0
@@ -590,12 +599,14 @@ class SoftSATModel(nn.Module):
 	def greedy_decoder(self, annotation_batch, max_len):
 
 		# initialize
+		annotation_batch = annotation_batch.to(device)
 		init_memory, init_hidden = self.init_mlp(annotation_batch)	
 		decoder_memory = init_memory
 		decoder_hidden = init_hidden
 		batch_size = annotation_batch.size(0)
 		decoder_input = torch.LongTensor([[START_token for _ in range(batch_size)]])
-		all_tokens = torch.zeros([0], dtype=torch.long)
+		decoder_input = decoder_input.to(device)
+		all_tokens = torch.zeros([0], device=device, dtype=torch.long)
 
 		# greedy decoding
 		for _ in range(max_len):
@@ -666,8 +677,8 @@ def test_4():
 		cnn_activations = torch.load(cnn_activations_file)
 
 	# model dimensions
-	cell_dim = 100
-	embedding_dim = 200
+	cell_dim = 300
+	embedding_dim = 500
 	voc_size = voc.num_words
 	_, a_dim, a_W, a_H = list(cnn_activations.shape)
 	a_size = a_W * a_H
@@ -678,7 +689,12 @@ def test_4():
 	interactive_test(model, orig_image_dir, voc)
 
 
-def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip):
+def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip, model_save_file):
+
+	print("Training model . . .")
+	print_every = 100
+	save_every = 5000
+
 	# set to train mode
 	model.train()
 
@@ -687,22 +703,30 @@ def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rat
 
 	# load batches for each iteration
 	# TODO: use Dataset, DataLoader class?
-	training_batches = [sample_batch(cnn_activations, captions, voc, BATCH_SIZE) for _ in range(n_iteration)]
+	num_batches = 10000
+	training_batches = [sample_batch(cnn_activations, captions, voc, BATCH_SIZE) for _ in range(num_batches)]
 
-	iteration = 0
-
+	print_loss = 0.0
 	for iteration in range(n_iteration):
 		opt.zero_grad()
-		loss, norm_loss = model(training_batches[iteration])
+		loss, norm_loss = model(training_batches[iteration%num_batches])
 		loss.backward()
 		_ = nn.utils.clip_grad_norm_(model.parameters(), clip)
 		opt.step()
-		print(norm_loss)
-	pass
+		print_loss += norm_loss
+		if iteration % print_every == print_every - 1:
+			print("Iteration: %d, loss: %f"%(iteration+1, print_loss / print_every))
+			print_loss = 0.0
+		if iteration % save_every == save_every - 1:
+			torch.save(model.state_dict(), model_save_file + "_%07d"%(iteration+1))
+
+	print("Training complete!")
+	return
 
 
 def tokens_to_str(tokens, voc):
 
+	tokens = tokens.cpu()
 	L = [voc.idx2word[token] for token in tokens.numpy()]
 	return ' '.join(L)
 
@@ -729,10 +753,12 @@ def test_5():
 
 	# config
 	train = True
-	ckpt_file = None
-	ell_dim = 100
+	load_model = False
+	model_load_file = data_dir + 'ckpt/modelB_0000499'
+	model_save_file = data_dir + 'ckpt/modelB'
+	cell_dim = 100
 	embedding_dim = 200
-	n_iteration = 10
+	n_iteration = 10000000
 	learning_rate = 0.001
 	clip = 50.0
 
@@ -750,23 +776,19 @@ def test_5():
 	else:
 		cnn_activations = torch.load(cnn_activations_file)
 
-	# load / build model
-	if ckpt_file:
-		model = None
-	else:
-		voc_size = voc.num_words
-		_, a_dim, a_W, a_H = list(cnn_activations.shape)
-		model = SoftSATModel(a_dim, a_W * a_H, voc_size, embedding_dim, cell_dim)
+	# build model
+	voc_size = voc.num_words
+	_, a_dim, a_W, a_H = list(cnn_activations.shape)
+	model = SoftSATModel(a_dim, a_W * a_H, voc_size, embedding_dim, cell_dim)
+	if load_model:
+		model.load_state_dict(torch.load(model_load_file))
+	model = model.to(device)
 
 	if train:
-		train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip)
+		train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip, model_save_file)
 
 	interactive_test(model, orig_image_dir, voc)
 
 
-test_3()
-
-
-
-
+test_5()
 

@@ -7,8 +7,8 @@ plan:
 - Intermediate files: Done
 - Toy data generator: Done
 - Build model (soft attention): Done
-- Use GPU, checkpointing, logging
-- Train with toy data
-- Train with real data
+- Use GPU, checkpointing, logging: Done
+- Overfit with small data
+- Validation
 - BLEU score
 - (optional) stochastic hard attention
