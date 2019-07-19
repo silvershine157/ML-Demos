@@ -35,20 +35,22 @@ toy_data_basic_paths = {
 	"ckpt_dir": "./data/toy_data/basic/ckpt/"
 }
 
-PATHS = toy_data_basic_paths
+PATHS = flickr8k_paths
 
 ## Preprocessing options
 NEW_INTERMEDIATE_DATA = False # voc, captions, image names
 NEW_CNN_ACTIVATIONS = False # annotation vectors
 MIN_WORD_COUNT = 3 # voc size is fixed to 10000 in the paper
-MAX_CAPTION_LENGTH = 20 # does not count <start>, <end>
+MAX_CAPTION_LENGTH = 24 # does not count <start>, <end>
 
-## Model options
+## Checkpointing
 LOAD_MODEL = True
-MODEL_LOAD_FILE = PATHS["ckpt_dir"]+'modelB_0217000'
-MODEL_SAVE_FILE = PATHS["ckpt_dir"]+'modelB'
-CELL_DIM = 100
-EMBEDDING_DIM = 200
+MODEL_LOAD_FILE = PATHS["ckpt_dir"]+'modelC_0021000'
+MODEL_SAVE_FILE = PATHS["ckpt_dir"]+'modelC'
+
+## Model dimensions
+CELL_DIM = 100 # 'n'
+EMBEDDING_DIM = 200 # 'm'
 
 ## Training options
 TRAIN = False
@@ -61,7 +63,9 @@ CLIP = 50.0
 NUM_LINES = None
 
 
-## Voc: Vocabulary mapping class inspired by pytorch chatbot tutorial
+## Preprocessing caption
+
+#Voc: Vocabulary mapping class inspired by pytorch chatbot tutorial
 
 PAD_token = 0
 START_token = 1
@@ -111,7 +115,15 @@ class Voc(object):
 			self.add_word(word)
 
 
-## Preprocessing caption
+'''
+<Output>
+voc: maintains word <-> idx mapping info
+captions: list of N caption groups
+	- caption group is a list of captions for an image
+	- caption does not include special tokens
+image_names
+	- list of image file names, order consistent with captions
+'''
 
 def process_caption_file(caption_file, num_lines=None):
 
@@ -175,14 +187,7 @@ def process_caption_file(caption_file, num_lines=None):
 
 	print("Keep %d images among %d images"%(len(image_names), len(orig_image_names)))
 
-	'''
-	voc: maintains word <-> idx mapping info
-	captions: list of N caption groups
-		- caption group is a list of captions for an image
-		- caption does not include special tokens
-	image_names
-		- list of image file names, order consistent with captions
-	'''
+
 	return voc, captions, image_names
 
 def sentence_to_indices(voc, sentence):
@@ -237,7 +242,16 @@ class ImageDataset(Dataset):
 		return img
 
 
-def make_cnn_activations(image_names, image_dir, cnn_batch_size=1024):
+'''
+<Output>
+cnn_activations: (N, D, W, H) tensor where
+- N: number of images
+- W: horizontal spatial dimension
+- H: vertical spatial dimension
+- D: feature dimension (not color)
+'''
+
+def make_cnn_activations(image_names, image_dir, cnn_batch_size=256):
 	# inspired by pytorch transfer learning tutorial
 
 	single = (len(image_names)==1)
@@ -255,10 +269,12 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size=1024):
 	img_dataset = ImageDataset(image_dir, image_names, trans)
 	
 	# load pretrained CNN as feature extractor
-	cnn_model = torchvision.models.resnet18(pretrained=True)
+	cnn_model = torchvision.models.vgg16(pretrained=True)
 	for param in cnn_model.parameters():
 		param.requires_grad = False
-	cnn_extractor = torch.nn.Sequential(*list(cnn_model.children())[:-2])
+	
+	#cnn_extractor = torch.nn.Sequential(*list(cnn_model.children())[:-2]) # resnet18 512 x 7 x 7
+	cnn_extractor = torch.nn.Sequential(*list(list(cnn_model.children())[0].children())[:29]) # vgg16 512 x 14 x 14
 
 	if not single:
 		cnn_extractor = cnn_extractor.to(device)
@@ -279,14 +295,6 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size=1024):
 	if not single:
 		print("activation shape: "+str(list(cnn_activations.shape)))
 
-	'''
-	cnn_activations: (N, D, W, H) tensor where
-	- N: number of images
-	- W: horizontal spatial dimension
-	- H: vertical spatial dimension
-	- D: feature dimension (not color)
-	'''
-
 	return cnn_activations
 
 def flat_annotations(cnn_activations):
@@ -294,6 +302,15 @@ def flat_annotations(cnn_activations):
 	a_size = a_W * a_H
 	annotations = cnn_activations.view((-1, a_dim, a_size))
 	return annotations
+
+
+'''
+<Output>
+annotation_batch: (B, D, W, H)
+caption_batch: (max_target_len, B)
+mask_batch: (max_target_len, B)
+max_target_len: integer
+'''
 
 def sample_batch(cnn_activations, captions, voc, batch_size):
 
@@ -305,13 +322,6 @@ def sample_batch(cnn_activations, captions, voc, batch_size):
 		caption_batch_list.append(random.choice(caption_group))
 
 	indices_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
-
-	'''
-	annotation_batch: (B, D, W, H)
-	caption_batch: (max_target_len, B)
-	mask_batch: (max_target_len, B)
-	max_target_len: integer
-	'''
 
 	return annotation_batch, indices_batch, mask_batch, max_target_len
 
@@ -563,8 +573,7 @@ class SoftSATModel(nn.Module):
 		return all_tokens
 
 
-
-
+# training iterations
 
 def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip, model_save_file):
 
@@ -601,12 +610,13 @@ def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rat
 	return
 
 
+# evaluation
+
 def tokens_to_str(tokens, voc):
 
 	tokens = tokens.cpu()
 	L = [voc.idx2word[token] for token in tokens.numpy()]
 	return ' '.join(L)
-
 
 def interactive_test(model, image_dir, voc):
 
@@ -614,7 +624,6 @@ def interactive_test(model, image_dir, voc):
 		q = input("image name:")
 		if q == 'quit':
 			return
-
 		# make annotation for image q
 		cnn_activations = make_cnn_activations([q], image_dir, 1)
 		annotation = flat_annotations(cnn_activations)
@@ -646,7 +655,7 @@ def main():
 	voc_size = voc.num_words
 	_, a_dim, a_W, a_H = list(cnn_activations.shape)
 	model = SoftSATModel(a_dim, a_W * a_H, voc_size, EMBEDDING_DIM, CELL_DIM)
-	if load_model:
+	if LOAD_MODEL:
 		model.load_state_dict(torch.load(MODEL_LOAD_FILE))
 	model = model.to(device)
 
@@ -657,5 +666,24 @@ def main():
 	# generate caption for given image filename
 	interactive_test(model, PATHS["orig_image_dir"], voc)
 
+'''
+def test_cnn():
+
+	cnn_model = torchvision.models.vgg16(pretrained=True)
+	for param in cnn_model.parameters():
+		param.requires_grad = False
+	#print("ORIGINAL MODEL")
+	print(cnn_model)
+	#cnn_extractor = torch.nn.Sequential(*list(cnn_model.children()))
+	cnn_extractor = torch.nn.Sequential(*list(list(cnn_model.children())[0].children())[:29])
+	#print("TRIMMED MODEL")
+	print(cnn_extractor)
+
+	inp = torch.zeros((10, 3, 224, 224))
+	out = cnn_extractor(inp)
+
+	print(out.shape)
+'''
 
 main()
+

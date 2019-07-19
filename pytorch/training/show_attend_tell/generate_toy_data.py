@@ -9,7 +9,7 @@ MIN_L1_DIST = 30
 
 visual_dir = 'data/visual/'
 
-dataset_dir = 'data/toy_data/basic/'
+dataset_dir = 'data/toy_data/single/'
 image_dir = dataset_dir + 'Images/'
 caption_file = dataset_dir + 'captions.txt'
 
@@ -256,7 +256,7 @@ def test():
 		shapes_used = ["circle", "triangle", "square"],
 		color_used = ["red", "blue", "green"],
 		min_obj = 1,
-		max_obj = 4
+		max_obj = 1
 	)
 
 	images, names, captions = gen.make_data(5000)
@@ -267,13 +267,6 @@ def test():
 	write_captions(captions)
 	print("Done!")
 
-	#img = images[3]
-	#img.save(visual_dir + "test_drawing.png")
-	#print(names[3])
-	#for cap in captions[3]:
-	#	print(cap)
-
-	
 
 
 test()

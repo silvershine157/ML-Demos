@@ -8,7 +8,7 @@ plan:
 - Toy data generator: Done
 - Build model (soft attention): Done
 - Use GPU, checkpointing, logging: Done
-- Overfit with small data
+- Overfit with small data: Done
 - Validation
 - BLEU score
 - (optional) stochastic hard attention
