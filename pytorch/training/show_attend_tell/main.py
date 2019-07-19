@@ -1,3 +1,8 @@
+'''
+References:
+PyTorch chatbot tutorial: https://pytorch.org/tutorials/beginner/chatbot_tutorial.html
+PyTorch transfer learning tutorial: https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
+'''
 import numpy as np
 import torchvision
 import torch
@@ -8,58 +13,55 @@ from torch.utils.data import Dataset, DataLoader
 import random
 import itertools
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+## Data path
+
 flickr8k_paths = {
 	"data_dir": "./data/flickr8k/",
-	"orig_caption_file": "Flickr_Data/Flickr_TextData/Flickr8k.lemma.token.txt",
-	"orig_image_dir": "Flickr_Data/Images/",
-	"intermediate_data_file": "processed/intermediate_data",
-	"cnn_activations_file": "processed/cnn_activations"
+	"orig_caption_file": "./data/flickr8k/Flickr_Data/Flickr_TextData/Flickr8k.lemma.token.txt",
+	"orig_image_dir": "./data/flickr8k/Flickr_Data/Images/",
+	"intermediate_data_file": "./data/flickr8k/processed/intermediate_data",
+	"cnn_activations_file": "./data/flickr8k/processed/cnn_activations",
+	"ckpt_dir": "./data/flickr8k/ckpt/"
 }
 
 toy_data_basic_paths = {
 	"data_dir": "./data/toy_data/basic/",
-	"orig_caption_file": "captions.txt",
-	"orig_image_dir": "Images/",
-	"intermediate_data_file": "processed/intermediate_data",
-	"cnn_activations_file": "processed/cnn_activations"	
+	"orig_caption_file": "./data/toy_data/basic/captions.txt",
+	"orig_image_dir": "./data/toy_data/basic/Images/",
+	"intermediate_data_file": "./data/toy_data/basic/processed/intermediate_data",
+	"cnn_activations_file": "./data/toy_data/basic/processed/cnn_activations",
+	"ckpt_dir": "./data/toy_data/basic/ckpt/"
 }
 
-paths = flickr8k_paths
+PATHS = toy_data_basic_paths
 
-data_dir = paths["data_dir"]
+## Preprocessing options
+NEW_INTERMEDIATE_DATA = False # voc, captions, image names
+NEW_CNN_ACTIVATIONS = False # annotation vectors
+MIN_WORD_COUNT = 3 # voc size is fixed to 10000 in the paper
+MAX_CAPTION_LENGTH = 20 # does not count <start>, <end>
 
-# original data
-orig_caption_file = data_dir + paths["orig_caption_file"]
-orig_image_dir = data_dir + paths["orig_image_dir"]
+## Model options
+LOAD_MODEL = True
+MODEL_LOAD_FILE = PATHS["ckpt_dir"]+'modelB_0217000'
+MODEL_SAVE_FILE = PATHS["ckpt_dir"]+'modelB'
+CELL_DIM = 100
+EMBEDDING_DIM = 200
 
-# intermediate data
-new_intermediate_data = False
-intermediate_data_file = data_dir + paths["intermediate_data_file"]
-
-# CNN activations
-new_cnn_activations = False
-CNN_BATCH_SIZE = 1024
-cnn_activations_file = data_dir + paths["cnn_activations_file"]
-
-# minimum word count to be kept in voc
-# original paper fixes the vocabulary size to 10000
-MIN_WORD_COUNT = 3
-
-# maximum caption legnth (does not count <start>, <end>)
-MAX_CAPTION_LENGTH = 20
-
+## Training options
+TRAIN = False
 BATCH_SIZE = 64
+N_ITERATIONS = 10000000
+LEARNING_RATE = 0.001
+CLIP = 50.0
 
-# resizing
-IMG_SIZE = 224 # >= 224
-
-# DEBUG
+## Debug
 NUM_LINES = None
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-# Vocabulary mapping inspired by pytorch chatbot tutorial
+## Voc: Vocabulary mapping class inspired by pytorch chatbot tutorial
 
 PAD_token = 0
 START_token = 1
@@ -74,11 +76,9 @@ class Voc(object):
 		self.num_words = 3
 		self.trimmed = False
 
-
 	def add_words(self, words):
 		for word in words:
 			self.add_word(word.lower())
-
 
 	def add_word(self, word):
 		if word not in self.word2idx:
@@ -88,7 +88,6 @@ class Voc(object):
 			self.num_words += 1
 		else:
 			self.word2cnt[word] += 1
-
 
 	def trim(self, min_count):
 
@@ -101,7 +100,6 @@ class Voc(object):
 		for word, cnt in self.word2cnt.items():
 			if cnt >= min_count:
 				keep_words.append(word)
-
 		print("Keep %d words among %d words (not counting special tokens)"%(len(keep_words), len(self.word2idx)))
 
 		# give new indices
@@ -112,6 +110,8 @@ class Voc(object):
 		for word in keep_words:
 			self.add_word(word)
 
+
+## Preprocessing caption
 
 def process_caption_file(caption_file, num_lines=None):
 
@@ -128,7 +128,6 @@ def process_caption_file(caption_file, num_lines=None):
 	orig_image_names = []
 	orig_captions = []
 	for line in lines:
-
 		# read image name & words
 		tokens = line.strip().split()
 		img_name = (tokens[0].split("#"))[0]
@@ -157,12 +156,10 @@ def process_caption_file(caption_file, num_lines=None):
 	for idx, caption_group in enumerate(orig_captions):
 		survive = True
 		for caption in caption_group:
-			
 			# check length
 			if len(caption) > MAX_CAPTION_LENGTH:
 				survive = False
 				break
-
 			# check vocabulary
 			for word in caption:
 				if word not in voc.word2idx:
@@ -170,7 +167,6 @@ def process_caption_file(caption_file, num_lines=None):
 					break
 			if not survive:
 				break
-
 		if survive:
 			survived_img_indices.append(idx)
 
@@ -179,9 +175,50 @@ def process_caption_file(caption_file, num_lines=None):
 
 	print("Keep %d images among %d images"%(len(image_names), len(orig_image_names)))
 
+	'''
+	voc: maintains word <-> idx mapping info
+	captions: list of N caption groups
+		- caption group is a list of captions for an image
+		- caption does not include special tokens
+	image_names
+		- list of image file names, order consistent with captions
+	'''
 	return voc, captions, image_names
 
+def sentence_to_indices(voc, sentence):
+	return [voc.word2idx[word] for word in sentence] + [END_token]
 
+def zero_padding(indices_batch, fillvalue=PAD_token):
+	# implicitly transpose
+	return list(itertools.zip_longest(*indices_batch, fillvalue=fillvalue))
+
+def obtain_mask(indices_batch, value=PAD_token):
+	mask = []
+	for i, seq in enumerate(indices_batch):
+		mask.append([])
+		for token in seq:
+			if token == PAD_token:
+				mask[i].append(0)
+			else:
+				mask[i].append(1)
+	return mask
+
+def caption_list_to_tensor(voc, caption_list):
+	# also inspired by pytorch chatbot tutorial
+	indices_batch = [sentence_to_indices(voc, sentence) for sentence in caption_list]
+	max_target_len = max([len(indices) for indices in indices_batch])
+	
+	# (max_target_len, B) <- implicitly transposed
+	indices_batch = zero_padding(indices_batch)
+	mask_batch = obtain_mask(indices_batch)
+	mask_batch = torch.ByteTensor(mask_batch)
+	indices_batch = torch.LongTensor(indices_batch)
+
+	return indices_batch, mask_batch, max_target_len
+
+
+
+## Preprocessing image (getting annotation vectors)
 
 class ImageDataset(Dataset):
 
@@ -199,8 +236,8 @@ class ImageDataset(Dataset):
 			img = self.transform(pil_img)
 		return img
 
-def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 
+def make_cnn_activations(image_names, image_dir, cnn_batch_size=1024):
 	# inspired by pytorch transfer learning tutorial
 
 	single = (len(image_names)==1)
@@ -211,13 +248,11 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 
 	# normalizing transforation
 	trans = torchvision.transforms.Compose([
-		torchvision.transforms.Resize((IMG_SIZE, IMG_SIZE)),
+		torchvision.transforms.Resize((224, 224)),
 		torchvision.transforms.ToTensor(),
 		torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 	])
-
 	img_dataset = ImageDataset(image_dir, image_names, trans)
-
 	
 	# load pretrained CNN as feature extractor
 	cnn_model = torchvision.models.resnet18(pretrained=True)
@@ -244,6 +279,14 @@ def make_cnn_activations(image_names, image_dir, cnn_batch_size):
 	if not single:
 		print("activation shape: "+str(list(cnn_activations.shape)))
 
+	'''
+	cnn_activations: (N, D, W, H) tensor where
+	- N: number of images
+	- W: horizontal spatial dimension
+	- H: vertical spatial dimension
+	- D: feature dimension (not color)
+	'''
+
 	return cnn_activations
 
 def flat_annotations(cnn_activations):
@@ -263,70 +306,6 @@ def sample_batch(cnn_activations, captions, voc, batch_size):
 
 	indices_batch, mask_batch, max_target_len = caption_list_to_tensor(voc, caption_batch_list)
 
-	return annotation_batch, indices_batch, mask_batch, max_target_len
-
-def sentence_to_indices(voc, sentence):
-	return [voc.word2idx[word] for word in sentence] + [END_token]
-
-def zero_padding(indices_batch, fillvalue=PAD_token):
-	# implicitly transpose
-	return list(itertools.zip_longest(*indices_batch, fillvalue=fillvalue))
-
-def obtain_mask(indices_batch, value=PAD_token):
-	mask = []
-	for i, seq in enumerate(indices_batch):
-		mask.append([])
-		for token in seq:
-			if token == PAD_token:
-				mask[i].append(0)
-			else:
-				mask[i].append(1)
-	return mask
-
-def caption_list_to_tensor(voc, caption_list):
-	# also inspired by pytorch chatbot tutorial
-
-	caption, mask, max_target_len = None, None, None
-
-	indices_batch = [sentence_to_indices(voc, sentence) for sentence in caption_list]
-	max_target_len = max([len(indices) for indices in indices_batch])
-	
-	# (max_target_len, B) <- implicitly transposed
-	indices_batch = zero_padding(indices_batch)
-
-	mask_batch = obtain_mask(indices_batch)
-	mask_batch = torch.ByteTensor(mask_batch)
-
-	indices_batch = torch.LongTensor(indices_batch)
-
-	return indices_batch, mask_batch, max_target_len
-
-
-# don't write files
-def test_1():
-
-	voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
-	'''
-	voc: maintains word <-> idx mapping info
-	captions: list of N caption groups
-		- caption group is a list of captions for an image
-		- caption does not include special tokens
-	image_names
-		- list of image file names, order consistent with captions
-	'''
-
-	cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
-	'''
-	cnn_activations: (N, D, W, H) tensor where
-	- N: number of images
-	- W: horizontal spatial dimension
-	- H: vertical spatial dimension
-	- D: feature dimension (not color)
-	'''
-
-	# we now have complete training data in our variables
-
-	annotation_batch, caption_batch, mask_batch, max_target_len = sample_batch(cnn_activations, captions, voc, BATCH_SIZE)
 	'''
 	annotation_batch: (B, D, W, H)
 	caption_batch: (max_target_len, B)
@@ -334,11 +313,11 @@ def test_1():
 	max_target_len: integer
 	'''
 
-	print(caption_batch)
-	print(mask_batch)
-	print(max_target_len)
-	return
+	return annotation_batch, indices_batch, mask_batch, max_target_len
 
+
+
+## Show, Attend and Tell Model
 
 class InitStateMLP(nn.Module):
 
@@ -350,9 +329,7 @@ class InitStateMLP(nn.Module):
 		self.cell_dim = cell_dim # 'n'
 
 		# layers
-
-		# 'f_init,c': n <- D
-		# 'f_init,h': n <- D
+		# 'f_init,c' and 'f_init,h': n and n <- D
 		self.init_mlp = nn.Sequential(
 			nn.Linear(self.a_dim, 200),
 			nn.ReLU(),
@@ -476,57 +453,19 @@ class ContextDecoder(nn.Module):
 		return probs, hidden, memory
 
 
-def train():
-	pass
-
+# negative log likelihood (cross entropy) loss for decoder output
 def maskNLLLoss(probs, target, mask):
 
 	# probs: (B, K)
 	# target: (1, B)
 	# mask: (1, B)
-
 	nTotal = mask.sum()
-
 	crossEntropy = -torch.log(torch.gather(probs, 1, target.view(-1, 1)).squeeze(1))
 
 	loss = crossEntropy.masked_select(mask).mean()
 	loss = loss.to(device)
 
 	return loss, nTotal.item()
-
-
-def test_2():
-
-	# get voc, captions, image_names
-	if new_intermediate_data:
-		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
-		torch.save((voc, captions, image_names), intermediate_data_file)
-	else:
-		voc, captions, image_names = torch.load(intermediate_data_file)
-
-	# get cnn activations
-	if new_cnn_activations:
-		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
-		torch.save(cnn_activations, cnn_activations_file)
-	else:
-		cnn_activations = torch.load(cnn_activations_file)
-
-	# dimensions
-	cell_dim = 100
-	embedding_dim = 200
-	voc_size = voc.num_words
-	_, a_dim, a_W, a_H = list(cnn_activations.shape)
-	a_size = a_W * a_H
-	
-	# initialize model
-	model = SoftSATModel(a_dim, a_size, voc_size, embedding_dim, cell_dim)
-
-	# prepare data
-	batch = sample_batch(cnn_activations, captions, voc, BATCH_SIZE)
-	
-	# forward pass
-	loss, normalized_loss = model(batch)
-
 
 
 class SoftSATModel(nn.Module):
@@ -624,76 +563,14 @@ class SoftSATModel(nn.Module):
 		return all_tokens
 
 
-def test_3():
 
-	# get voc, captions, image_names
-	if new_intermediate_data:
-		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
-		torch.save((voc, captions, image_names), intermediate_data_file)
-	else:
-		voc, captions, image_names = torch.load(intermediate_data_file)
-
-	# get cnn activations
-	if new_cnn_activations:
-		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
-		torch.save(cnn_activations, cnn_activations_file)
-	else:
-		cnn_activations = torch.load(cnn_activations_file)
-
-	# model dimensions
-	cell_dim = 100
-	embedding_dim = 200
-	voc_size = voc.num_words
-	_, a_dim, a_W, a_H = list(cnn_activations.shape)
-	a_size = a_W * a_H
-	
-	# build model
-	model = SoftSATModel(a_dim, a_size, voc_size, embedding_dim, cell_dim)
-
-	## Train
-
-	# train settings
-	n_iteration = 10
-	learning_rate = 0.001
-	clip = 50.0
-
-	train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip)
-
-
-
-def test_4():
-	# get voc, captions, image_names
-	if new_intermediate_data:
-		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
-		torch.save((voc, captions, image_names), intermediate_data_file)
-	else:
-		voc, captions, image_names = torch.load(intermediate_data_file)
-
-	# get cnn activations
-	if new_cnn_activations:
-		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
-		torch.save(cnn_activations, cnn_activations_file)
-	else:
-		cnn_activations = torch.load(cnn_activations_file)
-
-	# model dimensions
-	cell_dim = 300
-	embedding_dim = 500
-	voc_size = voc.num_words
-	_, a_dim, a_W, a_H = list(cnn_activations.shape)
-	a_size = a_W * a_H
-	
-	# build model
-	model = SoftSATModel(a_dim, a_size, voc_size, embedding_dim, cell_dim)
-
-	interactive_test(model, orig_image_dir, voc)
 
 
 def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip, model_save_file):
 
 	print("Training model . . .")
 	print_every = 100
-	save_every = 5000
+	save_every = 1000
 
 	# set to train mode
 	model.train()
@@ -743,52 +620,42 @@ def interactive_test(model, image_dir, voc):
 		annotation = flat_annotations(cnn_activations)
 
 		# perform greedy decoding
-		all_tokens = model.greedy_decoder(annotation, 10)
+		all_tokens = model.greedy_decoder(annotation, MAX_CAPTION_LENGTH+2)
 
 		# print result
 		print(tokens_to_str(all_tokens[0], voc))
 
 
-def test_5():
-
-	# config
-	train = True
-	load_model = False
-	model_load_file = data_dir + 'ckpt/modelB_0000499'
-	model_save_file = data_dir + 'ckpt/modelB'
-	cell_dim = 100
-	embedding_dim = 200
-	n_iteration = 10000000
-	learning_rate = 0.001
-	clip = 50.0
+def main():
 
 	# get voc, captions, image_names
-	if new_intermediate_data:
-		voc, captions, image_names = process_caption_file(orig_caption_file, num_lines=NUM_LINES)
-		torch.save((voc, captions, image_names), intermediate_data_file)
+	if NEW_INTERMEDIATE_DATA:
+		voc, captions, image_names = process_caption_file(PATHS["orig_caption_file"], num_lines=NUM_LINES)
+		torch.save((voc, captions, image_names), PATHS["intermediate_data_file"])
 	else:
-		voc, captions, image_names = torch.load(intermediate_data_file)
+		voc, captions, image_names = torch.load(PATHS["intermediate_data_file"])
 
 	# get cnn activations
-	if new_cnn_activations:
-		cnn_activations = make_cnn_activations(image_names, orig_image_dir, CNN_BATCH_SIZE)
-		torch.save(cnn_activations, cnn_activations_file)
+	if NEW_CNN_ACTIVATIONS:
+		cnn_activations = make_cnn_activations(image_names, PATHS["orig_image_dir"])
+		torch.save(cnn_activations, PATHS["cnn_activations_file"])
 	else:
-		cnn_activations = torch.load(cnn_activations_file)
+		cnn_activations = torch.load(PATHS["cnn_activations_file"])
 
-	# build model
+	# setup model
 	voc_size = voc.num_words
 	_, a_dim, a_W, a_H = list(cnn_activations.shape)
-	model = SoftSATModel(a_dim, a_W * a_H, voc_size, embedding_dim, cell_dim)
+	model = SoftSATModel(a_dim, a_W * a_H, voc_size, EMBEDDING_DIM, CELL_DIM)
 	if load_model:
-		model.load_state_dict(torch.load(model_load_file))
+		model.load_state_dict(torch.load(MODEL_LOAD_FILE))
 	model = model.to(device)
 
-	if train:
-		train_model(model, voc, cnn_activations, captions, n_iteration, learning_rate, clip, model_save_file)
+	# train model
+	if TRAIN:
+		train_model(model, voc, cnn_activations, captions, N_ITERATIONS, LEARNING_RATE, CLIP, MODEL_SAVE_FILE)
 
-	interactive_test(model, orig_image_dir, voc)
+	# generate caption for given image filename
+	interactive_test(model, PATHS["orig_image_dir"], voc)
 
 
-test_5()
-
+main()
