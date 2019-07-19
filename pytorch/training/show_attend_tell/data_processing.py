@@ -266,7 +266,9 @@ mask_batch: (max_target_len, B)
 max_target_len: integer
 '''
 
-def sample_batch(cnn_activations, captions, voc, batch_size):
+def sample_batch(bundle, voc, batch_size):
+
+	captions, cnn_activations = bundle
 
 	batch_idx = np.random.randint(len(captions), size=batch_size)
 	annotation_batch = flat_annotations(cnn_activations[batch_idx])

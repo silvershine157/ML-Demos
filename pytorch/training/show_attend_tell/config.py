@@ -11,6 +11,8 @@ MAX_CAPTION_LENGTH = 40 # does not count <start>, <end>
 LOAD_MODEL = True
 MODEL_LOAD_FILE = PATHS["ckpt_dir"]+'model_bigger_D_0001000'
 MODEL_SAVE_FILE = PATHS["ckpt_dir"]+'model_bigger_D'
+PRINT_EVERY = 50
+SAVE_EVERY = 200
 
 ## Model dimensions
 CELL_DIM = 100 # 'n'
@@ -22,6 +24,9 @@ BATCH_SIZE = 64
 N_ITERATIONS = 1000
 LEARNING_RATE = 0.001
 CLIP = 50.0
+
+## Testing
+BATCH_TEST = True # otherwise interactive mode
 
 ## Debug
 NUM_LINES = None

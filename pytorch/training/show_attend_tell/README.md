@@ -9,6 +9,6 @@ plan:
 - Build model (soft attention): Done
 - Use GPU, checkpointing, logging: Done
 - Overfit with small data: Done
-- Validation
+- Validation: Done
 - BLEU score: Import
-- (optional) stochastic hard attention
+- (optional) stochastic hard attention: Nope

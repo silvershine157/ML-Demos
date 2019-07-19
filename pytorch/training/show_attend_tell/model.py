@@ -196,31 +196,25 @@ class SoftSATModel(nn.Module):
 		rectified_losses = []
 		n_total = 0
 
-		# trough time
-		use_teacher_forcing = True
-		if use_teacher_forcing:
-			for t in range(max_target_len):
-				# get context vector
-				context, attn_weights = self.soft_attn(annotation_batch, decoder_memory)
+		# use teacher forcing
+		for t in range(max_target_len):
+			# get context vector
+			context, attn_weights = self.soft_attn(annotation_batch, decoder_memory)
 
-				# decoder forward
-				probs, decoder_hidden, decoder_memory = self.decoder(
-					context, decoder_input, decoder_hidden, decoder_memory
-				)
+			# decoder forward
+			probs, decoder_hidden, decoder_memory = self.decoder(
+				context, decoder_input, decoder_hidden, decoder_memory
+			)
 
-				# teacher forcing
-				# (1, B)
-				decoder_input = caption_batch[t].view(1, -1)
+			# teacher forcing
+			# (1, B)
+			decoder_input = caption_batch[t].view(1, -1)
 
-				mask_loss, nTotal = maskNLLLoss(probs, caption_batch[t], mask_batch[t])
-				loss += mask_loss
-				n_total += nTotal
-				rectified_losses.append(mask_loss.item() * nTotal)
-		else:
-			print("Greedy decoding not yet implemented")
-			return
+			mask_loss, nTotal = maskNLLLoss(probs, caption_batch[t], mask_batch[t])
+			loss += mask_loss
+			n_total += nTotal
+			rectified_losses.append(mask_loss.item() * nTotal)
 
-		# TODO: doubly stochastic attention
 
 		return loss, sum(rectified_losses)/n_total
 
