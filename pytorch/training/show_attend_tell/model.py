@@ -39,8 +39,10 @@ class InitStateMLP(nn.Module):
 
 class SoftAttention(nn.Module):
 
-	def __init__(self, a_dim, a_size, cell_dim):
+	def __init__(self, a_dim, a_size, cell_dim, double_attn):
 		super(SoftAttention, self).__init__()
+
+		self.double_attn = double_attn
 
 		# dimensions
 		self.a_dim = a_dim # 'D'
@@ -58,26 +60,38 @@ class SoftAttention(nn.Module):
 
 		self.softmax = nn.Softmax(dim=1)
 
-	def forward(self, annotations, last_memory):
+		#'sigmoid(f_beta)': scalar <- n
+		if self.double_attn:
+			self.attn_gate = nn.Sequential(
+				nn.Linear(self.cell_dim, 1),
+				nn.Sigmoid()
+			)
+
+	def forward(self, annotations, last_hidden):
 
 		# annotations: (B, D, L)
-		# last_memory: (1, B, n)
+		# last_hidden: (1, B, n)
 
 		# (B, n, L)
-		expanded = last_memory.squeeze(dim=0).unsqueeze(dim=2).expand((-1, -1, self.a_size))
+		expanded = last_hidden.squeeze(dim=0).unsqueeze(dim=2).expand((-1, -1, self.a_size))
 
 		# (B, D+n, L)
-		anno_and_mem = torch.cat((annotations, expanded), dim=1)
+		anno_and_hidden = torch.cat((annotations, expanded), dim=1)
 		
 		# (B, L, D+n)
-		anno_and_mem = anno_and_mem.transpose(1, 2)
+		anno_and_hidden = anno_and_hidden.transpose(1, 2)
 
 		# (B, L)
-		scores = self.scoring_mlp(anno_and_mem).squeeze(dim=2)
+		scores = self.scoring_mlp(anno_and_hidden).squeeze(dim=2)
 		attn_weights = self.softmax(scores)
-
+		
 		# (B, D)
 		context = torch.einsum('bdl,bl->bd', annotations, attn_weights)
+	
+		if self.double_attn:	
+			# (B)
+			gate = self.attn_gate(last_hidden).squeeze()
+			context = torch.einsum('b,bd->bd', gate, context)
 
 		# also return weights to enable doubly stochastic attn
 		return context, attn_weights
@@ -159,7 +173,7 @@ def maskNLLLoss(probs, target, mask):
 
 class SoftSATModel(nn.Module):
 
-	def __init__(self, cnn_activations_shape, voc_size, embedding_dim, cell_dim):
+	def __init__(self, cnn_activations_shape, voc_size, embedding_dim, cell_dim, double_attn_lambda=None):
 		super(SoftSATModel, self).__init__()
 
 		# dimensions
@@ -169,10 +183,13 @@ class SoftSATModel(nn.Module):
 		self.voc_size = voc_size
 		self.embedding_dim = embedding_dim
 		self.cell_dim = cell_dim
-
+		self.double_attn_lambda = double_attn_lambda
+		if self.double_attn_lambda:
+			self.mse_loss = nn.MSELoss(reduction='sum')
+	
 		# submodules
 		self.init_mlp = InitStateMLP(self.a_dim, self.cell_dim)
-		self.soft_attn = SoftAttention(self.a_dim, self.a_size, self.cell_dim)
+		self.soft_attn = SoftAttention(self.a_dim, self.a_size, self.cell_dim, double_attn_lambda is not None)
 		self.decoder = ContextDecoder(self.voc_size, self.embedding_dim, self.cell_dim, self.a_dim)
 
 
@@ -196,10 +213,27 @@ class SoftSATModel(nn.Module):
 		rectified_losses = []
 		n_total = 0
 
+		ones = torch.ones((batch_size, 1), device=device)
+
+		if self.double_attn_lambda:
+			# (B, L)
+			attn_weights_sum = torch.zeros((batch_size, self.a_size), device=device)
+
 		# use teacher forcing
 		for t in range(max_target_len):
 			# get context vector
-			context, attn_weights = self.soft_attn(annotation_batch, decoder_memory)
+			context, attn_weights = self.soft_attn(annotation_batch, decoder_hidden)
+
+			if self.double_attn_lambda:
+				# attn_weights: (B, L)
+				# mask_batch[t]: (B)
+
+				# mask: (B, L)
+				mask = mask_batch[t].unsqueeze(dim=1).expand((-1, self.a_size))
+				
+				attn_weights_sum += attn_weights.masked_fill(1-mask, 0)
+				
+				#attn_weights_sum += attn_weights
 
 			# decoder forward
 			probs, decoder_hidden, decoder_memory = self.decoder(
@@ -215,6 +249,10 @@ class SoftSATModel(nn.Module):
 			n_total += nTotal
 			rectified_losses.append(mask_loss.item() * nTotal)
 
+		if self.double_attn_lambda:
+			# calculate regularization term
+			attn_loss = self.mse_loss(attn_weights_sum.sum(dim=1), ones)
+			loss += self.double_attn_lambda * attn_loss
 
 		return loss, sum(rectified_losses)/n_total
 
@@ -233,7 +271,7 @@ class SoftSATModel(nn.Module):
 
 		# greedy decoding
 		for _ in range(max_len):
-			context, attn_weights = self.soft_attn(annotation_batch, decoder_memory)
+			context, attn_weights = self.soft_attn(annotation_batch, decoder_hidden)
 			probs, decoder_hidden, decoder_memory = self.decoder(
 				context, decoder_input, decoder_hidden, decoder_memory
 			)
@@ -245,6 +283,4 @@ class SoftSATModel(nn.Module):
 		all_tokens = all_tokens.transpose(0, 1)
 
 		return all_tokens
-
-
 

@@ -20,9 +20,11 @@ from data_processing import Voc, process_caption_file, sample_batch, make_cnn_ac
 from constants import device, PAD_token, START_token, END_token
 from config import *
 
+import warnings
+warnings.filterwarnings("ignore") # due to BLEU warnings
 
 # split to train / validation / test set
-def split_dataset(bundle, val_ratio=0.1, test_ratio=0.1):
+def split_dataset(bundle, val_ratio=0.05, test_ratio=0.05):
 	
 	captions, cnn_activations = bundle
 	N = len(captions)
@@ -69,8 +71,10 @@ def train_model(model, voc, train_bundle, val_bundle, n_iteration, learning_rate
 				for val_batch in val_batches:
 					_, norm_loss = model(val_batch)
 					val_loss += norm_loss
+				print("Validation loss: %f"%(val_loss / n_val_batches))
+				report_bleu(model, val_bundle, voc)
 				torch.save(model, model_save_file + "_%07d"%(iteration+1))
-				print("Validation loss: %f, model saved."%(val_loss / n_val_batches))
+				print("Model saved")
 
 	print("Training complete!")
 	return
@@ -103,29 +107,35 @@ def interactive_test(model, image_dir, voc, all_captions, all_image_names):
 		# report BLEU
 		idx = all_image_names.index(q)
 		bleu_score = sentence_bleu(all_captions[idx], s.split(), smoothing_function=chencherry.method1)
-		print("BLEU: %.4f"%bleu_score)
+		print("Smoothed BLEU: %.4f"%bleu_score)
 
 
 # batch testing on test datset
-def report_bleu(model, bundle, voc):
-	
-	print("Calculating average BLEU score . . .")
+def report_bleu(model, bundle, voc):	
 
 	captions, cnn_activations = bundle
 	chencherry = SmoothingFunction()
 	
 	N = len(captions)
-	bleu_sum = 0.0
+	wList = [(1.0,), (1/2, 1/2), (1/3, 1/3, 1/3), (1/4, 1/4, 1/4, 1/4)]
+	bleu_sum = [0.0 for _ in wList]
+
 	for n in range(N):
 		if n%100 == 0:
-			print("(%d / %d)"%(n, N))
+			#print("(%d / %d)"%(n, N))
+			pass
 		ref = captions[n]
 		annotation = flat_annotations(cnn_activations[n].unsqueeze(dim=0))
 		all_tokens = model.greedy_decoder(annotation, MAX_CAPTION_LENGTH+2)
 		s = tokens_to_str(all_tokens[0], voc)
-		bleu = sentence_bleu(captions[n], s.split(), smoothing_function=chencherry.method1)
-		bleu_sum += bleu
-	print("Average BLEU score: %.4f"%(bleu_sum/N))
+		for i, weights in enumerate(wList):
+			#bleu = sentence_bleu(captions[n], s.split(), smoothing_function=chencherry.method1)
+			bleu = sentence_bleu(captions[n], s.split(), weights=weights)
+			bleu_sum[i] += bleu
+
+	avg_bleu = [100 * total/N for total in bleu_sum]
+	format_str = '\t'.join(["BLEU-"+str(i+1)+": %.2f" for i in range(4)]) 
+	print(format_str%tuple(avg_bleu))
 
 
 # main routine
@@ -153,7 +163,7 @@ def main():
 	if LOAD_MODEL:
 		model = torch.load(MODEL_LOAD_FILE)
 	else:
-		model = SoftSATModel(cnn_activations.shape, voc.num_words, EMBEDDING_DIM, CELL_DIM)
+		model = SoftSATModel(cnn_activations.shape, voc.num_words, EMBEDDING_DIM, CELL_DIM, DOUBLE_ATTN_LAMBDA)
 	model = model.to(device)
 
 	# train model
@@ -164,6 +174,7 @@ def main():
 	# generate caption for given image filename
 	model.eval() # evaluation mode
 	if BATCH_TEST:
+		print("Calculating test BLEU score . . .")
 		report_bleu(model, test_bundle, voc)
 	else:
 		interactive_test(model, PATHS["orig_image_dir"], voc, captions, image_names)
