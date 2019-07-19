@@ -12,6 +12,7 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import random
 import itertools
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -58,6 +59,7 @@ BATCH_SIZE = 64
 N_ITERATIONS = 10000000
 LEARNING_RATE = 0.001
 CLIP = 50.0
+
 
 ## Debug
 NUM_LINES = None
@@ -587,8 +589,7 @@ def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rat
 	# build optimizers
 	opt = optim.Adam(model.parameters(), lr=learning_rate)
 
-	# load batches for each iteration
-	# TODO: use Dataset, DataLoader class?
+	# load batches for each iteration (allowing multiple captions for single image)
 	num_batches = 10000
 	training_batches = [sample_batch(cnn_activations, captions, voc, BATCH_SIZE) for _ in range(num_batches)]
 
@@ -614,16 +615,25 @@ def train_model(model, voc, cnn_activations, captions, n_iteration, learning_rat
 
 def tokens_to_str(tokens, voc):
 
-	tokens = tokens.cpu()
-	L = [voc.idx2word[token] for token in tokens.numpy()]
-	return ' '.join(L)
+	tokens = tokens.cpu().numpy()
+	L = []
+	for token in tokens:
+		if token == END_token:
+			break
+		L.append(voc.idx2word[token])
+	s = ' '.join(L)
+	return s
 
-def interactive_test(model, image_dir, voc):
+def interactive_test(model, image_dir, voc, all_captions, all_image_names):
 
 	while True:
 		q = input("image name:")
 		if q == 'quit':
 			return
+		if q not in all_image_names:
+			print("wrong name!")
+			continue
+
 		# make annotation for image q
 		cnn_activations = make_cnn_activations([q], image_dir, 1)
 		annotation = flat_annotations(cnn_activations)
@@ -632,8 +642,17 @@ def interactive_test(model, image_dir, voc):
 		all_tokens = model.greedy_decoder(annotation, MAX_CAPTION_LENGTH+2)
 
 		# print result
-		print(tokens_to_str(all_tokens[0], voc))
+		s = tokens_to_str(all_tokens[0], voc)
+		print(s)
+		bleu_score = get_bleu(s.split(), q, all_captions, all_image_names)
+		print("BLEU: %.4f"%bleu_score)
 
+def get_bleu(test_caption, test_image_name, all_captions, all_image_names):
+	idx = all_image_names.index(test_image_name)
+	ref_captions = all_captions[idx]
+	chencherry = SmoothingFunction()
+	bleu_score = sentence_bleu(ref_captions, test_caption, smoothing_function=chencherry.method1)
+	return bleu_score
 
 def main():
 
@@ -664,26 +683,8 @@ def main():
 		train_model(model, voc, cnn_activations, captions, N_ITERATIONS, LEARNING_RATE, CLIP, MODEL_SAVE_FILE)
 
 	# generate caption for given image filename
-	interactive_test(model, PATHS["orig_image_dir"], voc)
+	interactive_test(model, PATHS["orig_image_dir"], voc, captions, image_names)
 
-'''
-def test_cnn():
-
-	cnn_model = torchvision.models.vgg16(pretrained=True)
-	for param in cnn_model.parameters():
-		param.requires_grad = False
-	#print("ORIGINAL MODEL")
-	print(cnn_model)
-	#cnn_extractor = torch.nn.Sequential(*list(cnn_model.children()))
-	cnn_extractor = torch.nn.Sequential(*list(list(cnn_model.children())[0].children())[:29])
-	#print("TRIMMED MODEL")
-	print(cnn_extractor)
-
-	inp = torch.zeros((10, 3, 224, 224))
-	out = cnn_extractor(inp)
-
-	print(out.shape)
-'''
 
 main()
 

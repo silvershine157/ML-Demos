@@ -10,5 +10,5 @@ plan:
 - Use GPU, checkpointing, logging: Done
 - Overfit with small data: Done
 - Validation
-- BLEU score
+- BLEU score: Import
 - (optional) stochastic hard attention
