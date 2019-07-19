@@ -20,7 +20,24 @@ from data_processing import Voc, process_caption_file, sample_batch, make_cnn_ac
 from constants import device, PAD_token, START_token, END_token
 from config import *
 
-# training iterations
+
+# split to train / validation / test set
+def split_dataset(bundle, val_ratio=0.1, test_ratio=0.1):
+	
+	captions, cnn_activations = bundle
+	N = len(captions)
+	N_val = int(N * val_ratio)
+	N_test = int(N * test_ratio)
+	N_train = N - N_val - N_test
+
+	train_bundle = (captions[:N_train], cnn_activations[:N_train])
+	val_bundle = (captions[N_train:-N_test], cnn_activations[N_train:-N_test])
+	test_bundle = (captions[-N_test:], cnn_activations[-N_test:])
+	
+	return train_bundle, val_bundle, test_bundle
+
+
+# training loop
 def train_model(model, voc, train_bundle, val_bundle, n_iteration, learning_rate, clip, model_save_file):
 
 	print("Training model . . .")
@@ -59,7 +76,7 @@ def train_model(model, voc, train_bundle, val_bundle, n_iteration, learning_rate
 	return
 
 
-# evaluation
+# interactive evaluation: read image, produce caption & BLEU score
 def interactive_test(model, image_dir, voc, all_captions, all_image_names):
 
 	print("Interactive test")
@@ -89,6 +106,7 @@ def interactive_test(model, image_dir, voc, all_captions, all_image_names):
 		print("BLEU: %.4f"%bleu_score)
 
 
+# batch testing on test datset
 def report_bleu(model, bundle, voc):
 	
 	print("Calculating average BLEU score . . .")
@@ -110,21 +128,7 @@ def report_bleu(model, bundle, voc):
 	print("Average BLEU score: %.4f"%(bleu_sum/N))
 
 
-def split_dataset(bundle, val_ratio=0.1, test_ratio=0.1):
-	
-	captions, cnn_activations = bundle
-	N = len(captions)
-	N_val = int(N * val_ratio)
-	N_test = int(N * test_ratio)
-	N_train = N - N_val - N_test
-
-	train_bundle = (captions[:N_train], cnn_activations[:N_train])
-	val_bundle = (captions[N_train:-N_test], cnn_activations[N_train:-N_test])
-	test_bundle = (captions[-N_test:], cnn_activations[-N_test:])
-	
-	return train_bundle, val_bundle, test_bundle
-
-
+# main routine
 def main():
 
 	# get voc, captions, image_names
