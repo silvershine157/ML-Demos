@@ -69,7 +69,7 @@ def train_model(model, voc, train_bundle, val_bundle, n_iteration, learning_rate
 				for val_batch in val_batches:
 					_, norm_loss = model(val_batch)
 					val_loss += norm_loss
-				torch.save(model.state_dict(), model_save_file + "_%07d"%(iteration+1))
+				torch.save(model, model_save_file + "_%07d"%(iteration+1))
 				print("Validation loss: %f, model saved."%(val_loss / n_val_batches))
 
 	print("Training complete!")
@@ -150,9 +150,10 @@ def main():
 	train_bundle, val_bundle, test_bundle = split_dataset(bundle)
 
 	# setup model
-	model = SoftSATModel(cnn_activations.shape, voc.num_words, EMBEDDING_DIM, CELL_DIM)
 	if LOAD_MODEL:
-		model.load_state_dict(torch.load(MODEL_LOAD_FILE))
+		model = torch.load(MODEL_LOAD_FILE)
+	else:
+		model = SoftSATModel(cnn_activations.shape, voc.num_words, EMBEDDING_DIM, CELL_DIM)
 	model = model.to(device)
 
 	# train model

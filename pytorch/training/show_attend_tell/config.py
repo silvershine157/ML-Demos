@@ -9,19 +9,19 @@ MAX_CAPTION_LENGTH = 40 # does not count <start>, <end>
 
 ## Checkpointing
 LOAD_MODEL = False
-MODEL_LOAD_FILE = PATHS["ckpt_dir"]+'model_bigger_E_0001000'
+MODEL_LOAD_FILE = PATHS["ckpt_dir"]+'model_bigger_E_0003000'
 MODEL_SAVE_FILE = PATHS["ckpt_dir"]+'model_bigger_E'
-PRINT_EVERY = 1000
-SAVE_EVERY = 1000
+PRINT_EVERY = 50
+SAVE_EVERY = 200
 
 ## Model dimensions
-CELL_DIM = 100 # 'n'
+CELL_DIM = 200 # 'n'
 EMBEDDING_DIM = 200 # 'm'
 
 ## Training options
 TRAIN = True
 BATCH_SIZE = 64
-N_ITERATIONS = 100000000
+N_ITERATIONS = 200
 LEARNING_RATE = 0.001
 CLIP = 50.0
 
