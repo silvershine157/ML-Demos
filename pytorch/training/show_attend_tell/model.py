@@ -90,7 +90,7 @@ class SoftAttention(nn.Module):
 	
 		if self.double_attn:	
 			# (B)
-			gate = self.attn_gate(last_hidden).squeeze()
+			gate = self.attn_gate(last_hidden).squeeze(dim=2).squeeze(dim=0)
 			context = torch.einsum('b,bd->bd', gate, context)
 
 		# also return weights to enable doubly stochastic attn
