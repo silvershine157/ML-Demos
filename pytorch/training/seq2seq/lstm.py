@@ -48,7 +48,6 @@ class LSTM(torch.nn.Module):
             # new cell state
             c = forget_gate * c + input_gate * cand_c
             # new output
-
             h[:, t+1] = output_gate * torch.tanh(c)
 
         # discard initial output

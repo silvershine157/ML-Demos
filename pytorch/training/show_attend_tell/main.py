@@ -24,7 +24,7 @@ import warnings
 warnings.filterwarnings("ignore") # due to BLEU warnings
 
 # split to train / validation / test set
-def split_dataset(bundle, val_ratio=0.05, test_ratio=0.05):
+def split_dataset(bundle, val_ratio=0.15, test_ratio=0.15):
 	
 	captions, cnn_activations = bundle
 	N = len(captions)

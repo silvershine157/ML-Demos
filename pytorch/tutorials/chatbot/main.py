@@ -213,7 +213,7 @@ dropout = 0.1
 teacher_forcing_ratio = 1.0
 batch_size = 64
 
-loadFilename = None
+loadFilename = "./data/save/cb_model/cornell movie-dialogs corpus/2-2_500/4000_checkpoint.tar"
 checkpoint_iter = 4000
 
 
@@ -693,28 +693,29 @@ def build_and_train_model(train=True):
     decoder = decoder.to(device)
     print('Models built and ready to go!')
 
-    ## train model
-    clip = 50.0
-    
-    learning_rate = 0.0001
-    decoder_learning_ratio = 5.0
-    n_iteration = 4000
-    print_every = 1
-    save_every = 500
+    if train:
+        ## train model
+        clip = 50.0
+        
+        learning_rate = 0.0001
+        decoder_learning_ratio = 5.0
+        n_iteration = 4000
+        print_every = 1
+        save_every = 500
 
-    # ensure train mode of dropout
-    encoder.train()
-    decoder.train()
+        # ensure train mode of dropout
+        encoder.train()
+        decoder.train()
 
-    print('Building optimizers . . .')
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
-    if loadFilename:
-        encoder_optimizer.load_state_dict(encoder_optimizer_sd)
-        decoder_optimizer.load_state_dict(decoder_optimizer_sd)
+        print('Building optimizers . . .')
+        encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
+        decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+        if loadFilename:
+            encoder_optimizer.load_state_dict(encoder_optimizer_sd)
+            decoder_optimizer.load_state_dict(decoder_optimizer_sd)
 
-    print('Starting Training!')
-    trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, clip, corpus_name, loadFilename)
+        print('Starting Training!')
+        trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, clip, corpus_name, loadFilename)
 
     return encoder, decoder
 
@@ -725,7 +726,7 @@ def run_eval(encoder, decoder):
     evaluateInput(encoder, decoder, searcher, voc)
 
 def main():
-    encoder, decoder = build_and_train_model(True)
+    encoder, decoder = build_and_train_model(False)
     run_eval(encoder, decoder)
 
 main()

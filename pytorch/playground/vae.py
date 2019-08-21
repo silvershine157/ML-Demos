@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data.sampler import SubsetRandomSampler
 
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 HIDDEN_DIM = 1000
-LATENT_DIM = 2
+LATENT_DIM = 30
 EPOCHS = 3
 learning_rate = 1.0
 
@@ -46,9 +46,9 @@ else:
 	train_loader = torch.utils.data.DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True)
 
-class Encoder(nn.Module):
+class MLPEncoder(nn.Module):
 	def __init__(self, output_dim):
-		super(Encoder, self).__init__()
+		super(MLPEncoder, self).__init__()
 		
 		# MLP encoder
 		self.fc1 = nn.Linear(28 * 28, HIDDEN_DIM)
@@ -60,9 +60,9 @@ class Encoder(nn.Module):
 		a2 = torch.tanh(self.fc2(a1))
 		return a2
 
-class Decoder(nn.Module):
+class MLPDecoder(nn.Module):
 	def __init__(self, input_dim):
-		super(Decoder, self).__init__()
+		super(MLPDecoder, self).__init__()
 
 		# MLP decoder
 		self.fc1 = nn.Linear(input_dim, HIDDEN_DIM)
@@ -109,8 +109,8 @@ def test_autoencoder():
 
 	'''
 
-	encoder = Encoder(output_dim=LATENT_DIM)
-	decoder = Decoder(input_dim=LATENT_DIM)
+	encoder = MLPEncoder(output_dim=LATENT_DIM)
+	decoder = MLPDecoder(input_dim=LATENT_DIM)
 	encoder.to(device)
 	decoder.to(device)
 
