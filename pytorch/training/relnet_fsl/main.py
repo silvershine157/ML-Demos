@@ -6,6 +6,8 @@ import os
 import random
 import numpy as np
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 '''
 Meta train set
 - Sample set
@@ -15,7 +17,7 @@ Meta test set
 - Test set
 '''
 
-EPISODES = 1000
+EPISODES = 3
 LEARNING_RATE = 0.001
 
 '''
@@ -187,19 +189,24 @@ def test():
 	embed_opt = torch.optim.Adam(embed_net.parameters(), lr=LEARNING_RATE)
 	rel_opt = torch.optim.Adam(rel_net.parameters(), lr=LEARNING_RATE)
 
+	embed_net.to(device)
+	rel_net.to(device)
+
 	# training
 	for episode in range(EPISODES):
 
 		# form episode
 		ep_data = next(iter(dataloader))
-		sample = ep_data['sample'] # 5 x 1 x 28 x 28
-		query = ep_data['query'] # 5 x 19 x 28 x 28
+		sample = ep_data['sample'].to(device) # 5 x 1 x 28 x 28
+		query = ep_data['query'].to(device) # 5 x 19 x 28 x 28
 		query = query.view(-1, 1, 28, 28) # flattening, 95 x 1 x 28 x 28
+
 
 		# forward pass
 		sample_features = embed_net(sample) # 5 x C x D x D (avoid redundant computation)
 		query_features = embed_net(query) # 95 x C x D x D 
 		combined, score_target = combine_pairs(sample_features, query_features)
+		score_target = score_target.to(device)
 		score_pred = rel_net(combined)
 		loss = criterion(score_pred, score_target)
 
@@ -211,5 +218,6 @@ def test():
 
 		print(loss.item())
 
+# TODO: move to GPU, validation (preferably modularized), monitoring log, good initlialization, better target
 
 test()
