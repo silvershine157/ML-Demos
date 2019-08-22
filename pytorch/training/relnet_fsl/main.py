@@ -17,6 +17,7 @@ Meta test set
 '''
 
 EPISODES = 3
+LEARNING_RATE = 0.001
 
 class EmbeddingModule(nn.Module):
 	def __init__(self):
@@ -126,32 +127,30 @@ def test():
 	embed_net = EmbeddingModule()
 	rel_net = RelationModule()
 
+	criterion = nn.MSELoss()
+
+	embed_opt = torch.optim.Adam(embed_net.parameters(), lr=LEARNING_RATE)
+	rel_opt = torch.optim.Adam(rel_net.parameters(), lr=LEARNING_RATE)
+
 	for episode in range(EPISODES):
 
 		# form episode
 		ep_data = next(iter(dataloader))
 		sample = ep_data['sample'] # 5 x 1 x 28 x 28
 		query = ep_data['query'] # 5 x 19 x 28 x 28
+		query = query.view(-1, 1, 28, 28) # flattening
 
-		# flatten data
-		sample = sample.view(-1, 1, 28, 28) # no change for one shot setting
-		query = query.view(-1, 1, 28, 28)
-
-		# do not want to recompute for every pair
-		sample_features = embed_net(sample) # 5 x C x D x D
-		query_features = embed_net(query) # 95 x C x D x D
-
+		# forward pass
+		sample_features = embed_net(sample) # 5 x C x D x D (avoid redundant computation)
+		query_features = embed_net(query) # 95 x C x D x D 
 		combined, score_target = combine_pairs(sample_features, query_features)
-
 		score_pred = rel_net(combined)
-		print(combined.shape)
-		print(score_target.shape)
-		print(score_pred.shape)
+		loss = criterion(score_pred, score_target)
 
-		break
-
-
-def test2():
-	pass
+		# backward pass & update
+		embed_net.zero_grad()
+		rel_net.zero_grad()
+		loss.backward()
+		embed_opt.step()
 
 test()
