@@ -6,7 +6,6 @@ import os
 import random
 import numpy as np
 
-
 '''
 Meta train set
 - Sample set
@@ -16,31 +15,87 @@ Meta test set
 - Test set
 '''
 
-EPISODES = 3
+EPISODES = 1000
 LEARNING_RATE = 0.001
 
+'''
+network architecture is identical to the author's code:
+https://github.com/floodsung/LearningToCompare_FSL/blob/master/omniglot/omniglot_train_one_shot.py
+'''
 class EmbeddingModule(nn.Module):
 	def __init__(self):
 		super(EmbeddingModule, self).__init__()
-		self.feature_dim = 10
-		self.conv = nn.Conv2d(1, self.feature_dim, kernel_size=3, padding=0)
+
+		# define architecture
+		self.layer1 = nn.Sequential(
+			nn.Conv2d(1, 64, kernel_size=3, padding=0),
+			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.ReLU(),
+			nn.MaxPool2d(2)
+		)
+		self.layer2 = nn.Sequential(
+			nn.Conv2d(64, 64, kernel_size=3, padding=0),
+			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.ReLU(),
+			nn.MaxPool2d(2)
+		)
+		self.layer3 = nn.Sequential(
+			nn.Conv2d(64, 64, kernel_size=3, padding=0),
+			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.ReLU()
+		)
+		self.layer4 = nn.Sequential(
+			nn.Conv2d(64, 64, kernel_size=3, padding=0),
+			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.ReLU(),
+		)
 
 	def forward(self, img):
 		# img: B x 1 x 28 x 28
-		# features: B x C x D x D
-		features = self.conv(img)
-		return features
+		# out: B x C x D x D
+		out = self.layer1(img)
+		out = self.layer2(out)
+		out = self.layer3(out)
+		out = self.layer4(out)
+		
+		return out
 
 class RelationModule(nn.Module):
 	def __init__(self):
 		super(RelationModule, self).__init__()
-		self.sigmoid = nn.Sigmoid()
+		
+		input_size = 64
+		hidden_size = 8
+
+		# define architecture
+		self.layer1 = nn.Sequential(
+			nn.Conv2d(128, 64, kernel_size=3, padding=1),
+			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.ReLU(),
+			nn.MaxPool2d(2)
+		)
+		self.layer2 = nn.Sequential(
+			nn.Conv2d(64, 64, kernel_size=3, padding=1),
+			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.ReLU(),
+			nn.MaxPool2d(2)
+		)
+		self.out_layer = nn.Sequential(
+			nn.Linear(input_size, hidden_size),
+			nn.ReLU(),
+			nn.Linear(hidden_size, 1),
+			nn.Sigmoid()
+		)
 
 	def forward(self, combined):
 		# combined: B x 2C x D x D
-		# relation_scores: B
-		relation_scores = self.sigmoid(combined.sum(dim=[1,2,3]))
-		return relation_scores
+		# out: B
+
+		out = self.layer1(combined)
+		out = self.layer2(out)
+		out = out.view(out.size(0), -1)
+		out = self.out_layer(out)
+		return out
 
 def get_class_dirs():
 
@@ -119,26 +174,27 @@ def combine_pairs(sample_features, query_features):
 
 
 def test():
-	# one pass
+
+	# setup data
 	meta_train_dirs, meta_val_dirs, meta_test_dirs = get_class_dirs()
 	dataset = OmniglotOneshotDataset(meta_train_dirs)
 	dataloader = DataLoader(dataset, batch_size=5, shuffle=True)
 
+	# construct model
 	embed_net = EmbeddingModule()
 	rel_net = RelationModule()
-
 	criterion = nn.MSELoss()
-
 	embed_opt = torch.optim.Adam(embed_net.parameters(), lr=LEARNING_RATE)
 	rel_opt = torch.optim.Adam(rel_net.parameters(), lr=LEARNING_RATE)
 
+	# training
 	for episode in range(EPISODES):
 
 		# form episode
 		ep_data = next(iter(dataloader))
 		sample = ep_data['sample'] # 5 x 1 x 28 x 28
 		query = ep_data['query'] # 5 x 19 x 28 x 28
-		query = query.view(-1, 1, 28, 28) # flattening
+		query = query.view(-1, 1, 28, 28) # flattening, 95 x 1 x 28 x 28
 
 		# forward pass
 		sample_features = embed_net(sample) # 5 x C x D x D (avoid redundant computation)
@@ -152,5 +208,8 @@ def test():
 		rel_net.zero_grad()
 		loss.backward()
 		embed_opt.step()
+
+		print(loss.item())
+
 
 test()
