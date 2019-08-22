@@ -38,7 +38,7 @@ class RelationModule(nn.Module):
 	def forward(self, combined):
 		# combined: B x 2C x D x D
 		# relation_scores: B
-		relation_scores = self.sigmoid(combined.sum(keepdim=0))
+		relation_scores = self.sigmoid(combined.sum(dim=[1,2,3]))
 		return relation_scores
 
 def get_class_dirs():
@@ -93,15 +93,28 @@ class OmniglotOneshotDataset(Dataset):
 def combine_pairs(sample_features, query_features):
 
 	_, C, D, _ = sample_features.size()
+	
+	# generate labels
+	sample_classes = torch.arange(5) # 5
+	query_classes = sample_classes.unsqueeze(dim=1).expand(-1, 19) # 5 x 19
+
+	# expand dimensions
+	sample_classes = sample_classes.unsqueeze(dim=1).expand(-1, 95) # 5 x 95	
+	query_classes = query_classes.contiguous().view(1, -1).expand(5, -1) # 5 x 95
+	
+	# generate target
+	target = (sample_classes == query_classes).type(torch.FloatTensor)
+	target = target.view(-1) # 475
 
 	# expand for pairing
 	sample_features = sample_features.unsqueeze(dim=1).expand(-1, 95, -1, -1, -1) # 5 x 95 x C x D x D
 	query_features = query_features.unsqueeze(dim=0).expand(5, -1, -1, -1, -1) # 5 x 95 x C x D x D
 	
+	# concat in depth
 	combined = torch.cat([sample_features, query_features], dim=2) # 5 x 95 x 2C x D x D
 	combined = combined.view(-1, 2*C, D, D) # 475 x 2C x D x D
-
-	return combined, score_target
+	
+	return combined, target
 
 
 def test():
@@ -130,7 +143,10 @@ def test():
 
 		combined, score_target = combine_pairs(sample_features, query_features)
 
+		score_pred = rel_net(combined)
 		print(combined.shape)
+		print(score_target.shape)
+		print(score_pred.shape)
 
 		break
 
