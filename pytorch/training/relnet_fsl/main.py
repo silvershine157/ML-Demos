@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import StepLR
 from skimage import io
 import os
 import random
 import numpy as np
+import math
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -18,7 +20,7 @@ Meta test set
 '''
 
 EPISODES = 1000
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.001
 VALIDATE_EVERY = 250
 VALIDATE_EPS = 25
 PRINT_EVERY = 50
@@ -147,6 +149,22 @@ class OmniglotOneshotDataset(Dataset):
 		query = torch.cat(imgs, dim=0)
 		return {"sample":sample, "query":query}
 
+def weights_init(m):
+	classname = m.__class__.__name__
+	if classname.find('Conv') != -1:
+		n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+		m.weight.data.normal_(0, math.sqrt(2. / n))
+		if m.bias is not None:
+			m.bias.data.zero_()
+		elif classname.find('BatchNorm') != -1:
+			m.weight.data.fill_(1)
+			m.bias.data.zero_()
+		elif classname.find('Linear') != -1:
+			n = m.weight.size(1)
+			m.weight.data.normal_(0, 0.01)
+			m.bias.data = torch.ones(m.bias.data.size())
+
+
 
 def combine_pairs(sample_features, query_features):
 
@@ -185,19 +203,29 @@ def test():
 	metaval_loader = DataLoader(metaval_dataset, batch_size=5, shuffle=True)
 	
 	# construct model
+	print('Constructing model . . .')
 	embed_net = EmbeddingModule()
 	rel_net = RelationModule()
 	criterion = nn.MSELoss()
+
+	# setup training
 	embed_opt = torch.optim.Adam(embed_net.parameters(), lr=LEARNING_RATE)
 	rel_opt = torch.optim.Adam(rel_net.parameters(), lr=LEARNING_RATE)
+	embed_scheduler = StepLR(embed_opt, step_size=100000, gamma=0.5)
+	rel_scheduler = StepLR(rel_opt, step_size=100000, gamma=0.5)
 
+	embed_net.apply(weights_init)
+	rel_net.apply(weights_init)
 	embed_net.to(device)
 	rel_net.to(device)
 
-	running_loss = 0.0
-
 	# training
+	print('Training . . .')
+	running_loss = 0.0
 	for episode in range(1, EPISODES+1):
+		
+		embed_scheduler.step(episode)
+		rel_scheduler.step(episode)
 
 		# form episode
 		ep_data = next(iter(metatrain_loader))
@@ -207,7 +235,7 @@ def test():
 
 		# forward pass
 		sample_features = embed_net(sample) # 5 x C x D x D (avoid redundant computation)
-		query_features = embed_net(query) # 95 x C x D x D 
+		query_features = embed_net(query) # 95 x C x D x D
 		combined, score_target = combine_pairs(sample_features, query_features)
 		score_target = score_target.to(device)
 		score_pred = rel_net(combined)
