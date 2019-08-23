@@ -10,23 +10,18 @@ import math
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-'''
-Meta train set
-- Sample set
-- Query set
-Meta test set
-- Support set
-- Test set
-'''
-
-EPISODES = 1000
+TRAIN_EPISODES = 100
 LEARNING_RATE = 0.001
-VALIDATE_EVERY = 100
-VALIDATE_EPS = 25
-PRINT_EVERY = 50
+VALIDATE_EVERY = 20
+VAL_EPISODES = 25
+TEST_EPISODES = 100
+PRINT_EVERY = 10
+CLASS_IN_EP = 5
+QUERY_SIZE = 19
+FEATURE_DIM = 64
 
 '''
-network architecture is identical to the author's code:
+network architecture and training detail is identical to the author's code:
 https://github.com/floodsung/LearningToCompare_FSL/blob/master/omniglot/omniglot_train_one_shot.py
 '''
 class EmbeddingModule(nn.Module):
@@ -120,11 +115,11 @@ def get_class_dirs():
 	num_train = 1200
 	random.seed(1)
 	random.shuffle(all_classes)
-	meta_train_dirs = all_classes[:num_train] # 1200
-	meta_val_dirs = all_classes[num_train:] # 423
-	meta_test_dirs = meta_val_dirs # seems like the author's code is doing this
+	metatrain_dirs = all_classes[:num_train] # 1200
+	metaval_dirs = all_classes[num_train:] # 423
+	metatest_dirs = metaval_dirs # seems like the author's code is doing this
 
-	return meta_train_dirs, meta_val_dirs, meta_test_dirs
+	return metatrain_dirs, metaval_dirs, metatest_dirs
 
 
 class OmniglotOneshotDataset(Dataset):
@@ -193,41 +188,62 @@ def combine_pairs(sample_features, query_features):
 	return combined, target
 
 
-def test():
-
-	# setup data
-	meta_train_dirs, meta_val_dirs, meta_test_dirs = get_class_dirs()
-	metatrain_dataset = OmniglotOneshotDataset(meta_train_dirs)
-	metatrain_loader = DataLoader(metatrain_dataset, batch_size=5, shuffle=True)
-	metaval_dataset = OmniglotOneshotDataset(meta_val_dirs)
-	metaval_loader = DataLoader(metaval_dataset, batch_size=5, shuffle=True)
+def evaluate_accuracy(embed_net, rel_net, test_episodes, metatest_loader):
+	correct = 0
+	for _ in range(test_episodes):
+		ep_data = next(iter(metatest_loader))
+		sample = ep_data['sample'].to(device)
+		query = ep_data['query'].to(device)
+		query = query.view(-1, 1, 28, 28)
+				
+		sample_features = embed_net(sample)		
+		query_features = embed_net(query)
+		combined, score_target = combine_pairs(sample_features, query_features)
+		score_target = score_target.to(device)
+		score_pred = rel_net(combined)
+		class_target = torch.argmax(score_target.view(CLASS_IN_EP, CLASS_IN_EP * QUERY_SIZE), dim=0)
+		class_pred = torch.argmax(score_pred.view(CLASS_IN_EP, CLASS_IN_EP * QUERY_SIZE), dim=0)
+		equals = (class_target == class_pred)
+		correct += torch.sum(equals).item()
 	
-	# construct model
-	print('Constructing model . . .')
+	accuracy = correct/CLASS_IN_EP/QUERY_SIZE/test_episodes
+	return accuracy
+
+
+def main():
+	
+	print("Load data . . .")
+	metatrain_dirs, metaval_dirs, metatest_dirs = get_class_dirs()
+	metatrain_dataset = OmniglotOneshotDataset(metatrain_dirs)
+	metatrain_loader = DataLoader(metatrain_dataset, batch_size=CLASS_IN_EP, shuffle=True)
+	metaval_dataset = OmniglotOneshotDataset(metaval_dirs)
+	metaval_loader = DataLoader(metaval_dataset, batch_size=CLASS_IN_EP, shuffle=True)
+	metatest_dataset = OmniglotOneshotDataset(metaval_dirs)
+	metatest_loader = DataLoader(metaval_dataset, batch_size=CLASS_IN_EP, shuffle=True)
+
+	print("Build model . . .")
 	embed_net = EmbeddingModule()
 	rel_net = RelationModule()
-	criterion = nn.MSELoss()
 
-	# setup training
+	print("Setup training . . .")
+	criterion = nn.MSELoss()
 	embed_opt = torch.optim.Adam(embed_net.parameters(), lr=LEARNING_RATE)
 	rel_opt = torch.optim.Adam(rel_net.parameters(), lr=LEARNING_RATE)
 	embed_scheduler = StepLR(embed_opt, step_size=100000, gamma=0.5)
 	rel_scheduler = StepLR(rel_opt, step_size=100000, gamma=0.5)
-
 	embed_net.apply(weights_init)
 	rel_net.apply(weights_init)
 	embed_net.to(device)
 	rel_net.to(device)
 
-	# training
-	print('Training . . .')
+	print("Training . . .")
 	running_loss = 0.0
-	for episode in range(1, EPISODES+1):
+	for episode in range(1, TRAIN_EPISODES+1):
 		
 		embed_scheduler.step(episode)
 		rel_scheduler.step(episode)
 
-		# form episode
+		# setup episode
 		ep_data = next(iter(metatrain_loader))
 		sample = ep_data['sample'].to(device) # 5 x 1 x 28 x 28
 		query = ep_data['query'].to(device) # 5 x 19 x 28 x 28
@@ -242,7 +258,6 @@ def test():
 		loss = criterion(score_pred, score_target)
 
 		# backward pass & update
-		embed_net.zero_grad()
 		rel_net.zero_grad()
 		loss.backward()
 		nn.utils.clip_grad_norm_(embed_net.parameters(), 0.5)
@@ -251,35 +266,20 @@ def test():
 		rel_opt.step()
 
 		running_loss += loss.item()
-		if (episode % PRINT_EVERY == 0):
-			print('episode: ', episode, 'loss: ', running_loss/PRINT_EVERY)
+		if episode % PRINT_EVERY == 0:
+			# print progress
+			print('Episode %d, avg loss: %f'%(episode, running_loss/PRINT_EVERY))
 			running_loss = 0.0
-		
-		if (episode % VALIDATE_EVERY == 0):
-			correct = 0
-			for _ in range(VALIDATE_EPS):
-				ep_data = next(iter(metaval_loader))
-				sample = ep_data['sample'].to(device)
-				query = ep_data['query'].to(device)
-				query = query.view(-1, 1, 28, 28)
-				sample_features = embed_net(sample)
-				query_features = embed_net(query)
-				combined, score_target = combine_pairs(sample_features, query_features)
-				score_target = score_target.to(device)
-				# combined: 475 x 2C x D x D
-				# target: 475
-				score_pred = rel_net(combined) # 475
-				target_class = torch.argmax(score_target.view(5, 95), dim=0)
-				pred_class = torch.argmax(score_pred.view(5, 95), dim=0)
-				equals = (target_class == pred_class)
-				correct += torch.sum(equals).item()
 
-			accuracy = correct/95/VALIDATE_EPS
-			print('validation accuracy: ', accuracy)
+		if episode % VALIDATE_EVERY == 0:
+			# validate model
+			val_accuracy = evaluate_accuracy(embed_net, rel_net, VAL_EPISODES, metaval_loader)
+			print('Validation accuracy: %f'%(val_accuracy))
 
 
-# TODO: validation (preferably modularized), monitoring log, good initlialization, better target, learning rate
-# schedulig
+	print("Testing . . .")
+	test_accuracy = evaluate_accuracy(embed_net, rel_net, TEST_EPISODES, metatest_loader)
+	print('Test accuracy: %f'%(test_accuracy))
 
 
-test()
+main()
