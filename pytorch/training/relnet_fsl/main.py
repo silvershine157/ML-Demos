@@ -180,7 +180,7 @@ def combine_pairs(sample_features, query_features):
 	
 	# generate target
 	target = (sample_classes == query_classes).type(torch.FloatTensor)
-	target = target.view(-1) # 475
+	target = target.view(-1, 1) # 475 x 1
 
 	# expand for pairing
 	sample_features = sample_features.unsqueeze(dim=1).expand(-1, 95, -1, -1, -1) # 5 x 95 x C x D x D

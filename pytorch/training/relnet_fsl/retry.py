@@ -12,17 +12,18 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 CLASS_IN_EP = 3
-QUERY_SIZE = 4
+QUERY_SIZE = 1
 EPISODES = 1000
 PRINT_EVERY = 200
-LEARNING_RATE = 0.1
+LEARNING_RATE = 0.01
+FEATURE_DIM = 1
 
 class SimpleEmbeddingModule(nn.Module):
 	def __init__(self):
 		super(SimpleEmbeddingModule, self).__init__()
 		self.layer1 = nn.Sequential(
-			nn.Conv2d(1, 64, kernel_size=3, padding=0),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(1, FEATURE_DIM, kernel_size=3, padding=0),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU(),
 			nn.MaxPool2d(2)
 		)
@@ -37,25 +38,25 @@ class EmbeddingModule(nn.Module):
 
 		# define architecture
 		self.layer1 = nn.Sequential(
-			nn.Conv2d(1, 64, kernel_size=3, padding=0),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(1, FEATURE_DIM, kernel_size=3, padding=0),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU(),
 			nn.MaxPool2d(2)
 		)
 		self.layer2 = nn.Sequential(
-			nn.Conv2d(64, 64, kernel_size=3, padding=0),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(FEATURE_DIM, FEATURE_DIM, kernel_size=3, padding=0),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU(),
 			nn.MaxPool2d(2)
 		)
 		self.layer3 = nn.Sequential(
-			nn.Conv2d(64, 64, kernel_size=3, padding=0),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(FEATURE_DIM, FEATURE_DIM, kernel_size=3, padding=0),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU()
 		)
 		self.layer4 = nn.Sequential(
-			nn.Conv2d(64, 64, kernel_size=3, padding=0),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(FEATURE_DIM, FEATURE_DIM, kernel_size=3, padding=0),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU(),
 		)
 
@@ -71,10 +72,13 @@ class EmbeddingModule(nn.Module):
 class SimpleRelationModule(nn.Module):
 	def __init__(self):
 		super(SimpleRelationModule, self).__init__()
+		hidden_dim = 8
 		self.layer = nn.Sequential(
-			nn.Linear(128, 8),
+			nn.Linear(2*FEATURE_DIM, hidden_dim),
 			nn.ReLU(),
-			nn.Linear(8, 1),
+			nn.Linear(hidden_dim, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, 1),
 			nn.Sigmoid()
 		)
 
@@ -87,18 +91,18 @@ class RelationModule(nn.Module):
 	def __init__(self):
 		super(RelationModule, self).__init__()
 		
-		input_size = 64
+		input_size = FEATURE_DIM
 		hidden_size = 8
 		# define architecture
 		self.layer1 = nn.Sequential(
-			nn.Conv2d(128, 64, kernel_size=3, padding=1),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(2*FEATURE_DIM, FEATURE_DIM, kernel_size=3, padding=1),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU(),
 			nn.MaxPool2d(2)
 		)
 		self.layer2 = nn.Sequential(
-			nn.Conv2d(64, 64, kernel_size=3, padding=1),
-			nn.BatchNorm2d(64, momentum=1, affine=True),
+			nn.Conv2d(FEATURE_DIM, FEATURE_DIM, kernel_size=3, padding=1),
+			nn.BatchNorm2d(FEATURE_DIM, momentum=1, affine=True),
 			nn.ReLU(),
 			nn.MaxPool2d(2)
 		)
@@ -182,7 +186,7 @@ def combine_pairs(sample_features, query_features):
 	
 	# generate target
 	target = (sample_classes == query_classes).type(torch.FloatTensor)
-	target = target.view(-1) # 475
+	target = target.view(-1, 1) # 475 x 1
 
 	# expand for pairing
 	sample_features = sample_features.unsqueeze(dim=1).expand(-1, QUERY_SIZE*CLASS_IN_EP, -1, -1, -1) # 5 x 95 x C x D x D
@@ -271,13 +275,16 @@ def test2():
 	sample = sample.expand(-1, -1, 28, 28).contiguous()
 	query = sample.expand(-1, QUERY_SIZE, -1, -1).contiguous()
 	query = query.view(-1, 1, 28, 28)
-	sample_features = (sample.expand(-1, 64, -1, -1))[:, :, 0:1, 0:1]
-	query_features = (query.expand(-1, 64, -1, -1))[:, :, 0:1, 0:1]
+	sample_features = (sample.expand(-1, FEATURE_DIM, -1, -1))[:, :, 0:1, 0:1] - 1
+	query_features = (query.expand(-1, FEATURE_DIM, -1, -1))[:, :, 0:1, 0:1] - 1
 	print(sample_features.shape)
 	print(query_features.shape)	
 	combined, score_target = combine_pairs(sample_features, query_features)
+	print(combined.shape)
 
-	rel_net = RelationModule()
+	score_target = 0.8*score_target
+
+	# rel_net = RelationModule()
 	# use simple network
 	rel_net = SimpleRelationModule()
 
@@ -288,26 +295,121 @@ def test2():
 	
 	running_loss = 0.0
 	for episode in range(1, EPISODES+1):
+		
 		score_pred = rel_net(combined)
 		loss = criterion(score_pred, score_target)
 		rel_net.zero_grad()
 		loss.backward()
 		rel_opt.step()
+		
 		running_loss += loss.item()
 		if (episode % PRINT_EVERY == 0):
 			print('episode: ', episode, 'loss: ', running_loss/PRINT_EVERY)
 			running_loss = 0.0
-			'''
-			print('target')
-			print(score_target.view(-1).numpy())
-			print('pred')
-			print(score_pred.detach().view(-1).numpy())
-			'''
 
 	print(combined[:, 0, 0, 0].view(CLASS_IN_EP, -1).numpy())
-	print(combined[:, 64, 0, 0].view(CLASS_IN_EP, -1).numpy())
+	print(combined[:, FEATURE_DIM, 0, 0].view(CLASS_IN_EP, -1).numpy())
 	print(score_target.view(CLASS_IN_EP, -1).numpy())
 	print(score_pred.view(CLASS_IN_EP, -1).detach().numpy())
+	# simple regression not working???
+
+
+class VerySimpleRelationModule(nn.Module):
+	def __init__(self):
+		super(VerySimpleRelationModule, self).__init__()
+		hidden_dim = 8
+		self.layer = nn.Sequential(
+			nn.Linear(2, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, 1),
+			nn.Sigmoid()
+		)
+
+	def forward(self, combined):
+		out = combined.view(combined.size(0), -1)
+		out = self.layer(out)
+		return out
+
+def test3():
+ 
+	# use dummy data
+	sample = torch.arange(CLASS_IN_EP).type(torch.FloatTensor)
+	sample = sample.unsqueeze(dim=1).unsqueeze(dim=2).unsqueeze(dim=3)
+	sample = sample.expand(-1, -1, 28, 28).contiguous()
+	query = sample.expand(-1, QUERY_SIZE, -1, -1).contiguous()
+	query = query.view(-1, 1, 28, 28)
+	sample_features = (sample.expand(-1, FEATURE_DIM, -1, -1))[:, :, 0:1, 0:1] - 1
+	query_features = (query.expand(-1, FEATURE_DIM, -1, -1))[:, :, 0:1, 0:1] - 1
+	combined, score_target = combine_pairs(sample_features, query_features)
+
+	# basic regression task
+	X = torch.zeros(9, 2, dtype=torch.float)
+	Y = torch.zeros(9, 1, dtype=torch.float)
+	for i in [0, 1, 2]:
+		for j in [0, 1, 2]:
+			X[3*i+j, 0] = i-1
+			X[3*i+j, 1] = j-1
+			Y[3*i+j, 0] = 1 if i==j else 0
+	#print(X)
+	#print(Y)
+	print(Y)
+	print(score_target)
+
+	net = SimpleRelationModule()
+	criterion = nn.MSELoss()
+	opt = torch.optim.Adam(net.parameters(), lr=0.01)
+
+	for i in range(1000):
+		opt.zero_grad()
+		output = net(X)
+		loss = criterion(output, Y)
+		loss.backward()
+		opt.step()
+
+	res = output.detach().numpy()
+	print(res)
+	# this works
+
+
+
+def test4():
+ 
+	# use dummy data
+	sample = torch.arange(CLASS_IN_EP).type(torch.FloatTensor)
+	sample = sample.unsqueeze(dim=1).unsqueeze(dim=2).unsqueeze(dim=3)
+	sample = sample.expand(-1, -1, 28, 28).contiguous()
+	query = sample.expand(-1, QUERY_SIZE, -1, -1).contiguous()
+	query = query.view(-1, 1, 28, 28)
+	sample_features = (sample.expand(-1, FEATURE_DIM, -1, -1))[:, :, 0:1, 0:1] - 1
+	query_features = (query.expand(-1, FEATURE_DIM, -1, -1))[:, :, 0:1, 0:1] - 1
+	combined, score_target = combine_pairs(sample_features, query_features)
+	score_target = score_target.view(-1, 1)
+
+	# basic regression task
+	X = torch.zeros(9, 2, dtype=torch.float)
+	Y = torch.zeros(9, 1, dtype=torch.float)
+	for i in [0, 1, 2]:
+		for j in [0, 1, 2]:
+			X[3*i+j, 0] = i-1
+			X[3*i+j, 1] = j-1
+			Y[3*i+j, 0] = 1 if i==j else 0
+
+	net = SimpleRelationModule()
+	criterion = nn.MSELoss()
+	opt = torch.optim.Adam(net.parameters(), lr=0.01)
+
+	for i in range(1000):
+		opt.zero_grad()
+		output = net(X)
+		loss = criterion(output, score_target)
+		loss.backward()
+		opt.step()
+
+	res = output.detach().numpy()
+	print(res)
+	# this works
 
 
 test2()
