@@ -17,8 +17,11 @@ Meta test set
 - Test set
 '''
 
-EPISODES = 3
-LEARNING_RATE = 0.001
+EPISODES = 1000
+LEARNING_RATE = 0.01
+VALIDATE_EVERY = 250
+VALIDATE_EPS = 25
+PRINT_EVERY = 50
 
 '''
 network architecture is identical to the author's code:
@@ -58,8 +61,7 @@ class EmbeddingModule(nn.Module):
 		out = self.layer1(img)
 		out = self.layer2(out)
 		out = self.layer3(out)
-		out = self.layer4(out)
-		
+		out = self.layer4(out)		
 		return out
 
 class RelationModule(nn.Module):
@@ -68,7 +70,6 @@ class RelationModule(nn.Module):
 		
 		input_size = 64
 		hidden_size = 8
-
 		# define architecture
 		self.layer1 = nn.Sequential(
 			nn.Conv2d(128, 64, kernel_size=3, padding=1),
@@ -92,7 +93,6 @@ class RelationModule(nn.Module):
 	def forward(self, combined):
 		# combined: B x 2C x D x D
 		# out: B
-
 		out = self.layer1(combined)
 		out = self.layer2(out)
 		out = out.view(out.size(0), -1)
@@ -179,9 +179,11 @@ def test():
 
 	# setup data
 	meta_train_dirs, meta_val_dirs, meta_test_dirs = get_class_dirs()
-	dataset = OmniglotOneshotDataset(meta_train_dirs)
-	dataloader = DataLoader(dataset, batch_size=5, shuffle=True)
-
+	metatrain_dataset = OmniglotOneshotDataset(meta_train_dirs)
+	metatrain_loader = DataLoader(metatrain_dataset, batch_size=5, shuffle=True)
+	metaval_dataset = OmniglotOneshotDataset(meta_val_dirs)
+	metaval_loader = DataLoader(metaval_dataset, batch_size=5, shuffle=True)
+	
 	# construct model
 	embed_net = EmbeddingModule()
 	rel_net = RelationModule()
@@ -192,15 +194,16 @@ def test():
 	embed_net.to(device)
 	rel_net.to(device)
 
+	running_loss = 0.0
+
 	# training
-	for episode in range(EPISODES):
+	for episode in range(1, EPISODES+1):
 
 		# form episode
-		ep_data = next(iter(dataloader))
+		ep_data = next(iter(metatrain_loader))
 		sample = ep_data['sample'].to(device) # 5 x 1 x 28 x 28
 		query = ep_data['query'].to(device) # 5 x 19 x 28 x 28
 		query = query.view(-1, 1, 28, 28) # flattening, 95 x 1 x 28 x 28
-
 
 		# forward pass
 		sample_features = embed_net(sample) # 5 x C x D x D (avoid redundant computation)
@@ -214,10 +217,42 @@ def test():
 		embed_net.zero_grad()
 		rel_net.zero_grad()
 		loss.backward()
+		nn.utils.clip_grad_norm_(embed_net.parameters(), 0.5)
+		nn.utils.clip_grad_norm_(rel_net.parameters(), 0.5)
 		embed_opt.step()
+		rel_opt.step()
 
-		print(loss.item())
+		running_loss += loss.item()
 
-# TODO: move to GPU, validation (preferably modularized), monitoring log, good initlialization, better target
+		if (episode % PRINT_EVERY == 0):
+			print('episode: ', episode, 'loss: ', running_loss/PRINT_EVERY)
+			running_loss = 0.0
+		
+		if (episode % VALIDATE_EVERY == 0):
+			correct = 0
+			for _ in range(VALIDATE_EPS):
+				ep_data = next(iter(metaval_loader))
+				sample = ep_data['sample'].to(device)
+				query = ep_data['query'].to(device)
+				query = query.view(-1, 1, 28, 28)
+				sample_features = embed_net(sample)
+				query_features = embed_net(query)
+				combined, score_target = combine_pairs(sample_features, query_features)
+				score_target = score_target.to(device)
+				# combined: 475 x 2C x D x D
+				# target: 475
+				score_pred = rel_net(combined) # 475
+				target_class = torch.argmax(score_target.view(5, 95), dim=0)
+				pred_class = torch.argmax(score_pred.view(5, 95), dim=0)
+				equals = (target_class == pred_class)
+				correct += torch.sum(equals).item()
+
+			accuracy = correct/95/VALIDATE_EPS
+			print('validation accuracy: ', accuracy)
+
+
+# TODO: validation (preferably modularized), monitoring log, good initlialization, better target, learning rate
+# schedulig
+
 
 test()
