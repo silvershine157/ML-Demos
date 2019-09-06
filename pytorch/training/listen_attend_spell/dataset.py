@@ -1,6 +1,7 @@
 import torch
 import torchaudio
 from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 import os
 
 class SpeechDataset(Dataset):
@@ -61,30 +62,52 @@ def indices_to_str(indices):
 	return s
 
 def collate_fn(data):
-	specgram_list = [sample[0] for sample in data]
-	text_list = [sample[1] for sample in data]
 	
+	# get data & dimensions
+	spec_list = []
+	text_list = []
 	spec_lengths = []
 	text_lengths = []
 	for sample in data:
-		specgram = sample["specgram"]
+		specgram, text = sample["specgram"], sample["text"]
 		spec_lengths.append(specgram.size(2))
 		text_lengths.append(text.size(0))
+		spec_list.append(specgram)
+		text_list.append(text)
 	max_spec_len = max(spec_lengths)
 	max_text_len = max(text_lengths)
 
-	#TODO: spec/text pad & collate, obtain text mask
+	# pad specgram
+	spec_list = [F.pad(spec, (0, max_spec_len-spec.size(2)), mode='constant', value=0) for spec in spec_list]
+	specgram_batch = torch.cat(spec_list, dim=0)
 
+	# pad text
+	text_list = [F.pad(text, (0, max_text_len-text.size(0)), mode='constant', value=0) for text in text_list]
+	text_list = [text.unsqueeze(dim=0) for text in text_list]
+	text_batch = torch.cat(text_list, dim=0)
+	text_mask = generate_mask(text_batch)
+
+	# construct batch dict
+	spec_lengths = torch.ShortTensor(spec_lengths)
+	batch = {"specgram":specgram_batch, "text":text_batch, "spec_lengths":spec_lengths, "text_mask":text_mask}
+	return batch
+
+def generate_mask(text_batch):
+	not_pad = (text_batch != PAD_token)
+	return not_pad
+
+def get_data_loader(root_dir, batch_size, shuffle=True):
+	dataset = SpeechDataset(root_dir)
+	loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
+	return loader
 
 def test():
 	root_dir = "data/LibriSpeech/dev-clean/"
-	dataset = SpeechDataset(root_dir)
-	for i in range(len(dataset)):
-		sample = dataset[i]
-		specgram = sample["specgram"]
-		text = sample["text"]
-		print(specgram.size(), text.size())
-		if i==3:
-			break
+	loader = get_data_loader(root_dir, batch_size=4, shuffle=True)
+	for i, batch in enumerate(loader):
+		print(batch["specgram"].size())
+		print(batch["text"].size())
+		print(batch["text_mask"].size())
+		print(batch["spec_lengths"].size())
+		break
 
-test()
