@@ -4,6 +4,8 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import os
 
+N_MELS=40
+
 class SpeechDataset(Dataset):
 	def __init__(self, root_dir):
 		self.metadata = self.scan_metadata(root_dir)
@@ -14,7 +16,7 @@ class SpeechDataset(Dataset):
 	def __getitem__(self, idx):
 		audio_filename, text = self.metadata[idx]
 		audio_wave, fs = torchaudio.load(audio_filename)
-		specgram = torchaudio.transforms.MelSpectrogram()(audio_wave)
+		specgram = torchaudio.transforms.MelSpectrogram(n_mels=N_MELS)(audio_wave)
 		sample = {"specgram":specgram, "text":text}
 		return sample
 	
