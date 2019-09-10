@@ -80,6 +80,8 @@ def collate_fn(data):
 	max_text_len = max(text_lengths)
 
 	# pad specgram
+	# make spec length be multiple of 8 (3 pBLSTM layers)
+	max_spec_len = 8*(1+(max_spec_len-1)//8)
 	spec_list = [F.pad(spec, (0, max_spec_len-spec.size(2)), mode='constant', value=0) for spec in spec_list]
 	specgram_batch = torch.cat(spec_list, dim=0)
 

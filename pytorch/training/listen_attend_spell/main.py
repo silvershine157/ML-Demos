@@ -36,6 +36,23 @@ def test2():
 		break
 	spec = batch["specgram"]
 	print(spec.size())
-	listener = Listen()
+	listen = Listen(n_mels=40)
+	h = listen(spec)
+
+def test3():
+	# reducing time resolution
+	x = torch.arange(16*3)
+	x = x.view(3, 16).permute(1, 0)
+	x = x.unsqueeze(dim=2).expand(-1, -1, 2)
+	print(x[0, :, :])
+	print(x[-1, :, :])
+	print(x.size())
+	x = x.view(-1, 2, 3, 2)
+	x = torch.cat((x[:, 0, :, :], x[:, 1, :, :]), dim=2)
+	print(x.size())
+	print(x[0, :, :])
+	print(x[-1, :, :])
+
+	pass
 
 test2()
