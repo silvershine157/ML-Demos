@@ -3,7 +3,7 @@ import torchaudio
 import matplotlib.pyplot as plt
 
 from model import *
-from dataset import get_data_loader
+from dataset import get_data_loader, voc_size
 
 # data -> log-mel spectogram -> augmentation -> CNN -> encoder -> attn decoder
 
@@ -36,8 +36,13 @@ def test2():
 		break
 	spec = batch["specgram"]
 	print(spec.size())
-	listen = Listen(n_mels=40)
+	h_dim=512
+	listen = Listen(n_mels=40, h_dim=h_dim)
+	spell = AttendAndSpell(h_dim=h_dim, voc_size=voc_size())
 	h = listen(spec)
+	print(h.size())
+	spell(h)
+
 
 def test3():
 	# reducing time resolution
@@ -52,7 +57,6 @@ def test3():
 	print(x.size())
 	print(x[0, :, :])
 	print(x[-1, :, :])
-
 	pass
 
 test2()

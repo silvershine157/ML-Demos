@@ -63,6 +63,9 @@ def indices_to_str(indices):
 	s = [ALL_CHARS[idx] for idx in indices]
 	return s
 
+def voc_size():
+	return len(ALL_CHARS)
+
 def collate_fn(data):
 	
 	# get data & dimensions

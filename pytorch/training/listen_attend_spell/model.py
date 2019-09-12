@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 class Listen(nn.Module):
-	def __init__(self, n_mels):
+	def __init__(self, n_mels, h_dim):
 		super(Listen, self).__init__()
-		self.h_dim=512
+		self.h_dim=h_dim
 		self.blstm = nn.LSTM(input_size=n_mels, hidden_size=self.h_dim//2, num_layers=1, bidirectional=True)
 		self.pblstms = []
 		for i in range(3):
@@ -33,9 +33,19 @@ class Listen(nn.Module):
 		return h
 
 
-class AttendAndSpell(nn.Module):
-	def __init__(self):
-		super(AttendAndSpell, self).__init__()
+class Spell(nn.Module):
+	def __init__(self, h_dim, voc_size):
+		super(Spell, self).__init__()
+		self.h_dim = h_dim
+		self.embed_dim = 100
+		self.input_dim = self.h_dim + self.embed_dim
+		self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=h_dim, num_layers=2, bidirectional=False)
+		self.voc_size = voc_size
+		self.embedding = nn.Embedding(self.voc_size, self.embed_dim)
+		self.out_layer = nn.Sequential(
+			nn.Linear(h_dim, voc_size),
+			nn.Softmax(dim=2) # [1, B, voc_size]
+		)
 
 	def forward(self, h):
 		"""
@@ -44,22 +54,62 @@ class AttendAndSpell(nn.Module):
 		Returns:
 			out_probs: output probabilities [B, max_S, alphabet_size]
 		"""
+		B = h.size(0)
+		max_characters = 3
+		# any better way?
+		hidden_state = torch.zeros((2, B, self.h_dim))
+		cell_state = torch.zeros((2, B, self.h_dim))
+		SOS_token = 1 # TODO: make Voc class
+		last_token = torch.LongTensor([SOS_token for _ in range(B)])
+		for i in range(max_characters):
+			context = torch.zeros(B, self.h_dim)
+			# TODO: context = attn(last_state, h)
+			last_embedding = self.embedding(last_token)
+			cell_input = torch.cat((last_embedding, context), dim=1).unsqueeze(dim=0)
+			report(cell_input)
+			hidden_state, cell_state = self.lstm(cell_input, (hidden_state, cell_state))
+			report(hidden_state)
+			out_distr = self.out_layer(hidden_state)
+			report(out_distr)
+			best_token = out_distr.argmax(dim=3)
+			break
 		pass
+
+def report(tensor):
+	print(tensor.size(), tensor.dtype)
 
 class LAS(nn.Module):
 	def __init__(self):
 		super(LAS, self).__init__()
 		self.listener = Listen()
-		self.speller = AttendAndSpell()
+		self.speller = Spell()
 
-	def forward(self, spec):
+	def forward(self, spec, target=None, beta=1):
 		"""
 		Args:
 			spec: specgram image [B, N_MELS, max_T]
+			target: indices of target sequence [B, max_S], None for test mode
+			beta: number of partial hypothesis to keep in beam search
 		Returns:
-			out_probs: output probabilities [B, max_S, alphabet_size]
+			out_probs: output probabilities [B, max_S, voc_size]
+			out_labels: output labels [B, max_S, voc_size]
 		"""
 		h = self.listener(spec)
-		out_probs = self.speller(h)
+		if target:
+			# train mode
+			out_probs = self.decoder(h, None)
+			loss = cross_ent_loss(target, out_probs)			
+			pass
+		else:
+			# test mode
+			beams = ["SOS" for _ in range(beta)]
+			max_seq_len = 20
+			for _ in range(max_seq_len):
+				next_beams = []
+				for beam in beams:
+					next_probs = self.decoder(h, beam)
+					next_beams.extend(expand_beam(beam, next_probs))
+				beams = prune_beams(next_beams, beta)
+
 		return out_probs
 
