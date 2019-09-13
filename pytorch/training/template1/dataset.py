@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+from torch.utils.data import random_split, Dataset, DataLoader
 
 source_dir = 'data/source'
 
@@ -61,3 +62,31 @@ def read_mnist_labels(fname):
 def read_bytes(f, num_bytes):
 	b = f.read(num_bytes)
 	return int.from_bytes(b, byteorder='big')
+
+class MnistDataset(Dataset):
+	def __init__(self, imgs, labels):
+		self.imgs = imgs
+		self.labels = labels
+	def __len__(self):
+		return self.imgs.shape[0]
+	def __getitem(self, idx):
+		return {"image":self.imgs[idx, :, :], "label":self.imgs[idx]}
+
+def get_dataloader(data, batch_size):
+	train_ratio = 0.8
+	n_train_full = data["train_images"].shape[0]
+	n_train = int(train_ratio * n_train_full)
+	n_val = n_train_full - n_train
+	train_full_ds = MnistDataset(data["train_images"], data["train_labels"])
+	train_ds, val_ds = random_split(train_full_ds, [n_train, n_val])
+	test_ds = MnistDataset(data["test_images"], data["test_labels"])
+	print(len(train_ds))
+	print(len(val_ds))
+	print(len(test_ds))
+	train_loader = None
+	val_loader = None
+	test_loader = None
+	return train_loader, val_loader, test_loader
+
+
+
