@@ -26,7 +26,10 @@ def download_data():
 def preprocess_data():
 	# process source data
 	data = {}
-	data["train_img"] = read_mnist_images("train-images-idx3-ubyte")
+	data["train_images"] = read_mnist_images("train-images-idx3-ubyte")
+	data["train_labels"] = read_mnist_labels("train-labels-idx1-ubyte")
+	data["test_images"] = read_mnist_images("t10k-images-idx3-ubyte")
+	data["test_labels"] = read_mnist_labels("t10k-labels-idx1-ubyte")
 	return data
 
 def read_mnist_images(fname):
@@ -39,8 +42,21 @@ def read_mnist_images(fname):
 		cols = read_bytes(f, 4)
 		dt = np.dtype(np.uint8).newbyteorder('>')
 		imgs = np.fromfile(f, dtype=dt)
-		imgs = np.reshape(imgs, (n_imgs, rows, cols))
+	imgs = np.reshape(imgs, (n_imgs, rows, cols))
+	imgs = imgs/255.0 # normalize to 0~1
 	return imgs
+
+def read_mnist_labels(fname):
+	with open(os.path.join(source_dir, fname), 'rb') as f:
+		magic = read_bytes(f, 4)
+		if magic != 2049:
+			return ValueError
+		n_labels = read_bytes(f, 4)
+		dt = np.dtype(np.uint8).newbyteorder('>')
+		labels = np.fromfile(f, dtype=dt)
+	labels = np.reshape(labels, (n_labels))
+	labels = np.eye(10)[labels] # one-hot encoding
+	return labels
 
 def read_bytes(f, num_bytes):
 	b = f.read(num_bytes)
