@@ -5,7 +5,10 @@ from dataset import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', default='baseline', type=str)
+# train settings
 parser.add_argument('--epochs', default='10', type=int)
+parser.add_argument('--batch_size', default='4', type=int)
+# flags
 parser.add_argument('--train', action='store_true')
 parser.add_argument('--load_preproc', action='store_true')
 parser.add_argument('--load_model', action='store_true')
@@ -30,7 +33,7 @@ def main():
 
 	# setup dataloader
 	print("Making DataLoader . . .")
-	train_loader, val_loader, test_loader = get_dataloader(data, 8)
+	train_loader, val_loader, test_loader = get_dataloader(data, args.batch_size)
 
 	# setup model
 	if args.load_model:

@@ -73,6 +73,8 @@ class MnistDataset(Dataset):
 		return {"image":self.imgs[idx, :, :], "label":self.imgs[idx]}
 
 def get_dataloader(data, batch_size):
+	
+	# make train/val/test datasets
 	train_ratio = 0.8
 	n_train_full = data["train_images"].shape[0]
 	n_train = int(train_ratio * n_train_full)
@@ -80,13 +82,11 @@ def get_dataloader(data, batch_size):
 	train_full_ds = MnistDataset(data["train_images"], data["train_labels"])
 	train_ds, val_ds = random_split(train_full_ds, [n_train, n_val])
 	test_ds = MnistDataset(data["test_images"], data["test_labels"])
-	print(len(train_ds))
-	print(len(val_ds))
-	print(len(test_ds))
-	train_loader = None
-	val_loader = None
-	test_loader = None
+	
+	# make dataloaders
+	train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+	val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=True)
+	test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
+
 	return train_loader, val_loader, test_loader
-
-
 
