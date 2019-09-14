@@ -11,18 +11,17 @@ parser.add_argument('--name', default='baseline', type=str)
 parser.add_argument('--load_model', default='', type=str)
 # train settings
 parser.add_argument('--epochs', default='6', type=int)
-parser.add_argument('--batch_size', default='4', type=int)
+parser.add_argument('--batch_size', default='64', type=int)
 parser.add_argument('--lr', default='0.001', type=float)
-
-parser.add_argument('--print_every', default='2', type=int)
+parser.add_argument('--print_every', default='1', type=int)
 parser.add_argument('--validate_every', default='2', type=int)
-
 # flags
 parser.add_argument('--train', action='store_true')
 parser.add_argument('--load_preproc', action='store_true')
 parser.add_argument('--download', action='store_true')
-
 args = parser.parse_args()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def mse_loss(y_h, target):
 	err = y_h - target
@@ -31,14 +30,16 @@ def mse_loss(y_h, target):
 def train_epoch(net, loader, optimizer):
 	running_loss = 0.0
 	running_n = 0
+	net.to(device)
 	for batch_idx, batch in enumerate(loader):
 		optimizer.zero_grad()
-		n = batch["image"].size(0)
-		y_h = net(batch["image"])
-		target = batch["label"]
+		image = batch["image"].to(device)
+		target = batch["label"].to(device)
+		y_h = net(image)
 		batch_loss = mse_loss(y_h, target)
 		batch_loss.backward()
 		optimizer.step()
+		n = image.size(0)
 		running_loss += n * batch_loss.item()
 		running_n += n
 	avg_loss = running_loss / running_n
@@ -49,10 +50,11 @@ def test_epoch(net, loader):
 	running_n = 0
 	running_correct = 0
 	for batch_idx, batch in enumerate(loader):
-		n = batch["image"].size(0)
-		y_h = net(batch["image"])
-		target = batch["label"]
+		image = batch["image"].to(device)
+		target = batch["label"].to(device)
+		y_h = net(image)
 		batch_loss = mse_loss(y_h, target)
+		n = image.size(0)
 		running_loss += n * batch_loss.item()
 		label_pred = y_h.argmax(dim=1)
 		label_true = target.argmax(dim=1)
@@ -103,7 +105,7 @@ def main():
 				loss, perf = test_epoch(net, val_loader)
 				print("Validation loss: %4f, accuracy: %g"%(loss, perf))
 				if best_perf==None or perf > best_perf:
-					# new best model
+					# save best model
 					best_perf = perf
 					torch.save(net, 'data/'+args.name+'_best_(epoch%d)'%(epoch))
 
