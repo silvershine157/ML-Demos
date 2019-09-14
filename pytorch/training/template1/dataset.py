@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+import torch
 from torch.utils.data import random_split, Dataset, DataLoader
 
 source_dir = 'data/source'
@@ -69,8 +70,10 @@ class MnistDataset(Dataset):
 		self.labels = labels
 	def __len__(self):
 		return self.imgs.shape[0]
-	def __getitem(self, idx):
-		return {"image":self.imgs[idx, :, :], "label":self.imgs[idx]}
+	def __getitem__(self, idx):
+		img = torch.from_numpy(self.imgs[idx, :, :]).type(torch.FloatTensor)
+		label = torch.from_numpy(self.labels[idx, :]).type(torch.FloatTensor)
+		return {"image":img, "label":label}
 
 def get_dataloader(data, batch_size):
 	

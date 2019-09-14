@@ -1,4 +1,5 @@
 from dataset import *
+from model import *
 
 def test1():
 	data = preprocess_data()
@@ -8,4 +9,12 @@ def test1():
 	print(data["train_labels"].shape)
 	pass
 
-test1()
+def test2():
+	data = preprocess_data()
+	train_loader, val_loader, test_loader = get_dataloader(data, 4)
+	net = Net()
+	for b_i, batch in enumerate(train_loader):
+		net(batch["image"])
+		break
+
+test2()
