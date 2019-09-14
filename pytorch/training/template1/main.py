@@ -1,21 +1,25 @@
 import torch
 import os
 import argparse
+import torch.optim as optim
+
 from dataset import *
 from model import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', default='baseline', type=str)
+parser.add_argument('--load_model', default='', type=str)
 # train settings
-parser.add_argument('--epochs', default='10', type=int)
+parser.add_argument('--epochs', default='6', type=int)
 parser.add_argument('--batch_size', default='4', type=int)
-parser.add_argument('--print_every', default='5', type=int)
-parser.add_argument('--validate_every', default='5', type=int)
+parser.add_argument('--lr', default='0.001', type=float)
+
+parser.add_argument('--print_every', default='2', type=int)
+parser.add_argument('--validate_every', default='2', type=int)
 
 # flags
 parser.add_argument('--train', action='store_true')
 parser.add_argument('--load_preproc', action='store_true')
-parser.add_argument('--load_model', action='store_true')
 parser.add_argument('--download', action='store_true')
 
 args = parser.parse_args()
@@ -24,14 +28,17 @@ def mse_loss(y_h, target):
 	err = y_h - target
 	return torch.mean(torch.mul(err, err))
 
-def train_epoch(net, loader):
+def train_epoch(net, loader, optimizer):
 	running_loss = 0.0
 	running_n = 0
 	for batch_idx, batch in enumerate(loader):
+		optimizer.zero_grad()
 		n = batch["image"].size(0)
 		y_h = net(batch["image"])
 		target = batch["label"]
 		batch_loss = mse_loss(y_h, target)
+		batch_loss.backward()
+		optimizer.step()
 		running_loss += n * batch_loss.item()
 		running_n += n
 	avg_loss = running_loss / running_n
@@ -75,7 +82,7 @@ def main():
 	train_loader, val_loader, test_loader = get_dataloader(data, args.batch_size)
 
 	# setup model
-	if args.load_model:
+	if args.load_model != '':
 		print("Loading model . . .")
 		pass
 	else:
@@ -86,9 +93,10 @@ def main():
 	if args.train:
 		print("Training model . . .")
 		net.train()
+		optimizer = optim.Adam(net.parameters(), lr=args.lr)
 		best_perf = None
 		for epoch in range(1, args.epochs+1):
-			loss = train_epoch(net, train_loader)
+			loss = train_epoch(net, train_loader, optimizer)
 			if epoch % args.print_every == 0:
 				print("(Epoch %d) Training loss: %4f"%(epoch, loss))
 			if epoch % args.validate_every == 0:
