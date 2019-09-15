@@ -1,120 +1,101 @@
-import torch
-import torchaudio
-from torch.utils.data import Dataset, DataLoader
-import torch.nn.functional as F
 import os
+import sys
+import numpy as np
+import torch
+from torch.utils.data import random_split, Dataset, DataLoader
 
-N_MELS=40
+source_dir = 'data/source'
 
-class SpeechDataset(Dataset):
-	def __init__(self, root_dir):
-		self.metadata = self.scan_metadata(root_dir)
+def download_data():
+	download_links = [
+		"http://www.openslr.org/resources/12/dev-clean.tar.gz"	
+	]
+	# ensure clean source data directory
+	if not os.path.isdir(source_dir):
+		os.makedirs(source_dir)
+	else:
+		os.system('rm -rf '+source_dir+'/*')
+	# download source data
+	for link in download_links:
+		os.system('wget -P ' + source_dir + ' ' + link)
+	# extract data
+	for f in os.listdir(source_dir):
+		os.system('tar -xzf '+os.path.join(source_dir, f)+' -C '+source_dir)
 
+def preprocess_data():
+	# read labels & construct vocabulary
+	train_root = ""
+	test_root = ""
+	train_raw_label = scan_labels(train_root)
+	test_raw_label = scan_labels(test_root)
+	voc = make_voc(train_raw_label)
+	# train/val split
+	val_ratio=0.2
+	n_val = int(val_ratio * len(train_raw_label))
+	train_raw_label, val_raw_label = train_raw_label[n_val:], train_raw_label[:n_val]
+	# convert to flat spectrogram, label (indices)
+	train_specgram, train_label = make_flat_data(train_root, train_raw_label, voc)
+	val_specgram, val_label = make_flat_data(val_root, val_raw_label, voc)
+	test_specgram, test_label = make_flat_data(test_root, test_raw_label, voc)
+
+	data = {}
+	data["voc"] = voc # Voc object
+	data["train_specgram"] = train_specgram # list of tensors
+	data["train_label"] = train_label  # list of list of indices
+	data["val_specgram"] = val_specgram
+	data["val_label"] = val_label
+	data["test_specgram"] = test_specgram
+	data["test_label"] = test_label
+	return data
+
+def scan_labels(root):
+	raw_label = None # list(speaker) of list(chapter) of string
+	return raw_label
+
+class Voc(object):
+	def __init__(self):
+		self.idx2char = {}
+		self.char2idx = {}
+	
+def make_voc(raw_label):
+	voc = None
+	return voc
+
+def make_flat_data(root, row_label, voc):
+	specgram = None # list of tensors
+	label = None # list of list of indices
+	return specgram, label
+
+
+
+# template code
+
+class MnistDataset(Dataset):
+	def __init__(self, imgs, labels):
+		self.imgs = imgs
+		self.labels = labels
 	def __len__(self):
-		return len(self.metadata)
-
+		return self.imgs.shape[0]
 	def __getitem__(self, idx):
-		audio_filename, text = self.metadata[idx]
-		audio_wave, fs = torchaudio.load(audio_filename)
-		specgram = torchaudio.transforms.MelSpectrogram(n_mels=N_MELS)(audio_wave)
-		sample = {"specgram":specgram, "text":text}
-		return sample
+		img = torch.from_numpy(self.imgs[idx, :, :]).type(torch.FloatTensor)
+		label = torch.from_numpy(self.labels[idx, :]).type(torch.FloatTensor)
+		return {"image":img, "label":label}
+
+def get_dataloader(data, batch_size):
 	
-	# read text data and audio filenames 
-	def scan_metadata(self, root_dir):
-		metadata = []
-		for speaker in os.listdir(root_dir):
-			speaker_dir = os.path.join(root_dir, speaker)
-			for chapter in os.listdir(speaker_dir):
-				chapter_dir = os.path.join(speaker_dir, chapter)
-				chapter_audio = {}
-				for fname in os.listdir(chapter_dir):
-					fpath = os.path.join(chapter_dir, fname)
-					if fname[-4:] == ".txt":
-						chapter_text = self.parse_text(fpath)
-					elif fname[-5:] == ".flac":
-						chapter_audio[fname[:-5]] = fpath
-				for k in chapter_text:
-					data_pair = (chapter_audio[k], chapter_text[k])
-					metadata.append(data_pair)
-		return metadata
-		
-	def parse_text(self, textfile):
-		chapter_text = {}
-		with open(textfile, 'r') as f:
-			for line in f:
-				L = line.strip().split()
-				text = ' '.join(L[1:])
-				chapter_text[L[0]] = str_to_indices(text)
-		return chapter_text
-
-
-ALL_CHARS = "___ABCDEFGHIJKLMNOPQRSTUVWXYZ '"
-PAD_token = 0
-SOS_token = 1
-EOS_token = 2
-
-def str_to_indices(s):
-	indices = [ALL_CHARS.find(c) for c in s] + [EOS_token]
-	indices = torch.ShortTensor(indices)
-	return indices
-
-def indices_to_str(indices):
-	s = [ALL_CHARS[idx] for idx in indices]
-	return s
-
-def voc_size():
-	return len(ALL_CHARS)
-
-def collate_fn(data):
+	# make train/val/test datasets
+	train_ratio = 0.8
+	n_train_full = data["train_images"].shape[0]
+	n_train = int(train_ratio * n_train_full)
+	n_val = n_train_full - n_train
+	train_full_ds = MnistDataset(data["train_images"], data["train_labels"])
+	train_ds, val_ds = random_split(train_full_ds, [n_train, n_val])
+	test_ds = MnistDataset(data["test_images"], data["test_labels"])
 	
-	# get data & dimensions
-	spec_list = []
-	text_list = []
-	spec_lengths = []
-	text_lengths = []
-	for sample in data:
-		specgram, text = sample["specgram"], sample["text"]
-		spec_lengths.append(specgram.size(2))
-		text_lengths.append(text.size(0))
-		spec_list.append(specgram)
-		text_list.append(text)
-	max_spec_len = max(spec_lengths)
-	max_text_len = max(text_lengths)
+	# make dataloaders
+	train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+	val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=True)
+	test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
 
-	# pad specgram
-	# make spec length be multiple of 8 (3 pBLSTM layers)
-	max_spec_len = 8*(1+(max_spec_len-1)//8)
-	spec_list = [F.pad(spec, (0, max_spec_len-spec.size(2)), mode='constant', value=0) for spec in spec_list]
-	specgram_batch = torch.cat(spec_list, dim=0)
-
-	# pad text
-	text_list = [F.pad(text, (0, max_text_len-text.size(0)), mode='constant', value=0) for text in text_list]
-	text_list = [text.unsqueeze(dim=0) for text in text_list]
-	text_batch = torch.cat(text_list, dim=0)
-	text_mask = generate_mask(text_batch)
-
-	# construct batch dict
-	spec_lengths = torch.ShortTensor(spec_lengths)
-	batch = {"specgram":specgram_batch, "text":text_batch, "spec_lengths":spec_lengths, "text_mask":text_mask}
-	return batch
-
-def generate_mask(text_batch):
-	not_pad = (text_batch != PAD_token)
-	return not_pad
-
-def get_data_loader(root_dir, batch_size, shuffle=True):
-	dataset = SpeechDataset(root_dir)
-	loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
-	return loader
-
-def test():
-	root_dir = "data/LibriSpeech/dev-clean/"
-	loader = get_data_loader(root_dir, batch_size=4, shuffle=True)
-	for i, batch in enumerate(loader):
-		print(batch["specgram"].size())
-		print(batch["text"].size())
-		print(batch["text_mask"].size())
-		print(batch["spec_lengths"].size())
-		break
+	return train_loader, val_loader, test_loader
 
