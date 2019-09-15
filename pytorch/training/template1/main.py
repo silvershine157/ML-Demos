@@ -83,13 +83,26 @@ def main():
 	print("Making DataLoader . . .")
 	train_loader, val_loader, test_loader = get_dataloader(data, args.batch_size)
 
-	# setup model
+	# setup model & dirs
 	if args.load_model != '':
 		print("Loading model . . .")
 		pass
 	else:
 		print("Initializing model . . .")
 		net = Net()
+	model_root = 'data/models/'
+	if not os.path.exists(model_root):
+		os.makedirs(model_root)
+	i = 0
+	while True:
+		model_name = args.name + "(%d)"%(i)
+		model_dir = os.path.join(model_root, model_name)
+		if os.path.exists(model_dir):
+			i += 1
+			continue
+		else:
+			os.makedirs(model_dir)
+			break
 
 	# train model
 	if args.train:
@@ -107,7 +120,8 @@ def main():
 				if best_perf==None or perf > best_perf:
 					# save best model
 					best_perf = perf
-					torch.save(net, 'data/'+args.name+'_best_(epoch%d)'%(epoch))
+					fname = model_name+'_best_(epoch%d)'%(epoch)
+					torch.save(net, os.path.join(model_dir, fname))
 
 	# test model
 	print("Testing model . . .")
