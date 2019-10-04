@@ -13,9 +13,9 @@ def generate_data():
 	PI = np.array([0.2, 0.5, 0.3])
 	# p(z_n | z_{n-1}): transition matrix
 	A = np.array([
-		[0.7, 0.1, 0.2],
-		[0.3, 0.5, 0.2],
-		[0.2, 0.1, 0.7]
+		[0.85, 0.05, 0.1],
+		[0.2, 0.7, 0.1],
+		[0.1, 0.05, 0.85]
 	])
 	# p(x_n | z_n): D-dim gaussian
 	PHI_MU = np.array([
@@ -52,10 +52,9 @@ def visualize_data(x, z=None):
 		plt.plot(x[:, 0], x[:, 1])
 		plt.scatter(x[:, 0], x[:, 1])
 		plt.show()
-
-
+		
 def main():
 	x, z = generate_data()
-	visualize_data(x, z)
+	visualize_data(x, z=None)
 
 main()
