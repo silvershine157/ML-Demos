@@ -71,10 +71,26 @@ def init_params(x):
 	return params
 
 def em_step(old_params, x):
-	# E
+	
+	# E-step
 	gamma, xi, avgLL = forward_backward(old_params, x)
-	# M
-	new_params = None
+	
+	# M-step
+	pi = gamma[0, :]/np.sum(gamma[0, :])
+	A_ = np.sum(xi, axis=0) # (n-1, prev, current)
+	A = A_/np.sum(A_, axis=1, keepdims=True) # (prev, current)
+	MU = np.zeros((K, D))
+	SIGMA = np.zeros((K, D, D))
+	for k in range(K):
+		gamma_k = np.expand_dims(gamma[:, k], axis=1)
+		N_k = np.sum(gamma_k)
+		mu_k = np.sum(gamma_k*x,axis=0, keepdims=True)/N_k
+		x_c = x-mu_k
+		Sigma_k = np.einsum('n,ni,nj->ij', gamma[:, k], x_c, x_c)/N_k
+		MU[k, :] = mu_k
+		SIGMA[k, :, :] = Sigma_k
+
+	new_params = (pi, A, MU, SIGMA)
 	return new_params, avgLL
 
 def forward_backward(params, x):
