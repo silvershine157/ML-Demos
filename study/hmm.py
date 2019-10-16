@@ -36,7 +36,6 @@ def generate_data():
 	for n in range(1, N):
 		z[n] = np.random.choice(K, p=A[z[n-1], :])
 		x[n] = np.random.multivariate_normal(PHI_MU[z[n]], PHI_SIGMA[z[n]])
-
 	return x, z
 
 def visualize_data(x, z=None):
@@ -52,9 +51,49 @@ def visualize_data(x, z=None):
 		plt.plot(x[:, 0], x[:, 1])
 		plt.scatter(x[:, 0], x[:, 1])
 		plt.show()
-		
+
 def main():
 	x, z = generate_data()
-	visualize_data(x, z=None)
+	old_params = init_params(x)
+	new_params, p_x = em_step(old_params, x)
+	#visualize_data(x, z=None)
+
+def init_params(x):
+	# TODO: use K-means to intiialize emission parameters
+	pi = np.ones((K))/K
+	A = np.ones((K, K))/K
+	MU = np.random.random((K, D))
+	#SIGMA = [np.expand_dims(np.eye(D), axis=0) for _ in range(K)]
+	SIGMA = [0.1*np.eye(D) for _ in range(K)]
+	SIGMA = np.stack(SIGMA, axis=0)
+	params = (pi, A, MU, SIGMA)
+	return params
+
+def em_step(old_params, x):
+	# E
+	gamma, xi, p_x = forward_backward(old_params, x)
+	# M
+	new_params = None
+	return new_params, p_x
+
+def forward_backward(params, x):
+	'''
+	<input>
+	params = (pi, A, MU, SIGMA)
+		pi: (K)
+		A: (K, K)
+		MU: (K, D)
+		SIGMA: (K, D, D)
+	x: (N, D)
+	<output>
+	gamma: (N, K)
+	xi: (N, K, K)
+	'''
+	alpha_ = np.zeros((N, K))
+	beta_ = np.zeros((N, K))
+	gamma = None
+	xi = None
+	p_x = None
+	return gamma, xi, p_x
 
 main()
