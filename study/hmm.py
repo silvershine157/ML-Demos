@@ -1,11 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+from matplotlib.patches import Ellipse
+import matplotlib.animation as anim
 from scipy.stats import multivariate_normal
+import time
 
 ## model dimensions
 K = 3 # number of latent states
-N = 10 # number of data points
+N = 300 # number of data points
 D = 2 # dimension of a data point
 
 def generate_data():
@@ -53,14 +56,27 @@ def visualize_data(x, z=None):
 		plt.scatter(x[:, 0], x[:, 1])
 		plt.show()
 
-
 def init_params(x):
-	# TODO: use K-means to intiialize emission parameters
 	pi = np.ones((K))/K
 	A = np.ones((K, K))/K
+
+	# singular covariance
+	# -> due to collapsing to single datapoint
+	# -> improve with K-means initialization
 	MU = np.random.random((K, D))
-	#SIGMA = [np.expand_dims(np.eye(D), axis=0) for _ in range(K)]
-	SIGMA = [0.1*np.eye(D) for _ in range(K)]
+	while True:
+		x_diff = np.expand_dims(x, axis=1)-np.expand_dims(MU, axis=0) # (N, K, D)
+		sq_dists = np.einsum('nkd,nkd->nk', x_diff, x_diff) # (N, K)
+		assign_idx = np.argmin(sq_dists, axis=1)
+		assign_onehot = np.eye(K)[assign_idx] # (N, K)
+		Nks = np.expand_dims(np.sum(assign_onehot, axis=0), axis=1) # (K, 1)
+		new_MU = np.einsum('nd,nk->kd', x, assign_onehot)/Nks
+		change = np.sum(np.abs(MU - new_MU))
+		MU = new_MU
+		if change < 0.1:
+			break
+
+	SIGMA = [0.01*np.eye(D) for _ in range(K)]
 	SIGMA = np.stack(SIGMA, axis=0)
 	params = (pi, A, MU, SIGMA)
 	return params
@@ -140,13 +156,31 @@ def forward_backward(params, x):
 
 	return gamma, xi, avgLL
 
-
 def main():
 	x, z = generate_data()
 	params = init_params(x)
 	for _ in range(10):
+		_, _, MU, SIGMA = params
+		visualize_mixture(MU, SIGMA, x) #TODO: animate properly
 		params, avgLL = em_step(params, x)
 		print(avgLL)
-	#visualize_data(x, z=None)
+
+def visualize_mixture(MU, SIGMA, x):
+	
+	KEY_COLORS = 0.99*np.array([[1,0,0], [0,1,0], [0,0,1]])
+	fig = plt.figure(0)
+	ax = fig.add_subplot(111, aspect='equal')
+	ax.scatter(x[:,0], x[:,1])
+	# make cluster ellipse
+	for k in range(K):
+		u, sig, vh = np.linalg.svd(SIGMA[k])
+		angle = np.arctan2(u[1,0], u[0,0])
+		r = 5
+		e = Ellipse(MU[k], r*np.sqrt(sig[0]), r*np.sqrt(sig[1]), angle*180/np.pi)
+		e.set_alpha(0.2)
+		e.set_facecolor(KEY_COLORS[k])
+		ax.add_artist(e)
+	plt.show()
+
 
 main()
