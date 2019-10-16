@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+from scipy.stats import multivariate_normal
 
 ## model dimensions
 K = 3 # number of latent states
-N = 100 # number of data points
+N = 10 # number of data points
 D = 2 # dimension of a data point
 
 def generate_data():
@@ -55,7 +56,7 @@ def visualize_data(x, z=None):
 def main():
 	x, z = generate_data()
 	old_params = init_params(x)
-	new_params, p_x = em_step(old_params, x)
+	new_params, log_p_x = em_step(old_params, x)
 	#visualize_data(x, z=None)
 
 def init_params(x):
@@ -71,29 +72,61 @@ def init_params(x):
 
 def em_step(old_params, x):
 	# E
-	gamma, xi, p_x = forward_backward(old_params, x)
+	gamma, xi, avgLL = forward_backward(old_params, x)
 	# M
 	new_params = None
-	return new_params, p_x
+	return new_params, avgLL
 
 def forward_backward(params, x):
 	'''
 	<input>
 	params = (pi, A, MU, SIGMA)
 		pi: (K)
-		A: (K, K)
+		A: (K, K) [prev, cur]
 		MU: (K, D)
 		SIGMA: (K, D, D)
 	x: (N, D)
 	<output>
 	gamma: (N, K)
-	xi: (N, K, K)
+	xi: (N-1, K, K) [n-1, prev, cur]
+	avgLL: scalar
 	'''
+	pi, A, MU, SIGMA = params
 	alpha_ = np.zeros((N, K))
 	beta_ = np.zeros((N, K))
-	gamma = None
-	xi = None
-	p_x = None
-	return gamma, xi, p_x
+	c = np.zeros((N))
+	p_x_given_z = np.zeros((N, K)) # can be computed rightaway
+	
+	# compute p_x_given_z
+	for n in range(N):
+		for k in range(K):
+			p_x_given_z[n, k] = multivariate_normal.pdf(x[n,:], mean=MU[k,:], cov=SIGMA[k,:,:])
+
+	# compute alpha_ (rescaled) and c
+	unnorm = pi * p_x_given_z[0, :]
+	c[0] = np.sum(unnorm)
+	alpha_[0, :] = unnorm/c[0]
+	for n in range(1, N):
+		temp = np.expand_dims(alpha_[n-1,:], axis=1)*A # element-wise
+		unnorm = p_x_given_z[n, :] * np.sum(temp, axis=0)
+		c[n] = np.sum(unnorm)
+		alpha_[n, :] = unnorm/c[n]
+
+	# compute beta_ (rescaled)
+	beta_[N-1, :] = 1
+	for n in range(N-2, -1, -1): # N-2 ~ 0
+		# axis0: n, axis1: n+1
+		bet = np.expand_dims(beta_[n+1, :], axis=0)
+		p = np.expand_dims(p_x_given_z[n+1, :], axis=0)
+		beta_[n, :] = (1/c[n+1])*np.sum(bet * p * A, axis=1) 
+
+	# compute results
+	gamma = alpha_ * beta_
+	xi = np.zeros((N, K, K))
+	for n in range(1, N):
+		xi[n-1,:,:] = c[n]*np.expand_dims(alpha_[n-1,:],axis=1)*np.expand_dims(p_x_given_z[n,:],axis=0)*A*np.expand_dims(beta_[n,:],axis=0)
+	avgLL = np.mean(np.log(c)) # log(P(X))/N
+
+	return gamma, xi, avgLL
 
 main()
