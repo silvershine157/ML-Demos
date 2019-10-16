@@ -159,14 +159,23 @@ def forward_backward(params, x):
 def main():
 	x, z = generate_data()
 	params = init_params(x)
-	for _ in range(10):
+	for _ in range(100):
 		_, _, MU, SIGMA = params
-		visualize_mixture(MU, SIGMA, x) #TODO: animate properly
+		#visualize_mixture(MU, SIGMA, x) #TODO: animate properly
 		params, avgLL = em_step(params, x)
 		print(avgLL)
+	report_params(params)
+	visualize_mixture(MU, SIGMA, x)
 
-def visualize_mixture(MU, SIGMA, x):
-	
+def report_params(params):
+	pi, A, MU, SIGMA = params
+	print("Transition probabilities:")
+	for j in range(K):
+		for k in range(K):
+			print("%.03f  "%(A[j, k]), end="")
+		print("")
+
+def visualize_mixture(MU, SIGMA, x):	
 	KEY_COLORS = 0.99*np.array([[1,0,0], [0,1,0], [0,0,1]])
 	fig = plt.figure(0)
 	ax = fig.add_subplot(111, aspect='equal')
@@ -181,6 +190,5 @@ def visualize_mixture(MU, SIGMA, x):
 		e.set_facecolor(KEY_COLORS[k])
 		ax.add_artist(e)
 	plt.show()
-
 
 main()
