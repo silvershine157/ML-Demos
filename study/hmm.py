@@ -53,11 +53,6 @@ def visualize_data(x, z=None):
 		plt.scatter(x[:, 0], x[:, 1])
 		plt.show()
 
-def main():
-	x, z = generate_data()
-	old_params = init_params(x)
-	new_params, log_p_x = em_step(old_params, x)
-	#visualize_data(x, z=None)
 
 def init_params(x):
 	# TODO: use K-means to intiialize emission parameters
@@ -144,5 +139,14 @@ def forward_backward(params, x):
 	avgLL = np.mean(np.log(c)) # log(P(X))/N
 
 	return gamma, xi, avgLL
+
+
+def main():
+	x, z = generate_data()
+	params = init_params(x)
+	for _ in range(10):
+		params, avgLL = em_step(params, x)
+		print(avgLL)
+	#visualize_data(x, z=None)
 
 main()
