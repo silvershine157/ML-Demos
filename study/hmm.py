@@ -8,14 +8,17 @@ import time
 
 ## model dimensions
 K = 3 # number of latent states
-N = 300 # number of data points
+N = 1000 # number of data points
 D = 2 # dimension of a data point
+
+# np.random.seed(2)
 
 def generate_data():
 	## true model parameters
 	# p(z_0): initial distribution
 	PI = np.array([0.2, 0.5, 0.3])
 	# p(z_n | z_{n-1}): transition matrix
+	
 	A = np.array([
 		[0.85, 0.05, 0.1],
 		[0.2, 0.7, 0.1],
@@ -70,10 +73,10 @@ def init_params(x):
 		assign_idx = np.argmin(sq_dists, axis=1)
 		assign_onehot = np.eye(K)[assign_idx] # (N, K)
 		Nks = np.expand_dims(np.sum(assign_onehot, axis=0), axis=1) # (K, 1)
-		new_MU = np.einsum('nd,nk->kd', x, assign_onehot)/Nks
+		new_MU = np.einsum('nd,nk->kd', x, assign_onehot)/(Nks+1)
 		change = np.sum(np.abs(MU - new_MU))
 		MU = new_MU
-		if change < 0.1:
+		if change < 0.01:
 			break
 
 	SIGMA = [0.01*np.eye(D) for _ in range(K)]
@@ -141,17 +144,26 @@ def forward_backward(params, x):
 
 	# compute beta_ (rescaled)
 	beta_[N-1, :] = 1
+	debug=False
 	for n in range(N-2, -1, -1): # N-2 ~ 0
 		# axis0: n, axis1: n+1
 		bet = np.expand_dims(beta_[n+1, :], axis=0)
 		p = np.expand_dims(p_x_given_z[n+1, :], axis=0)
 		beta_[n, :] = (1/c[n+1])*np.sum(bet * p * A, axis=1) 
+		if debug:
+			print(bet)
+			print(p)
+			print(A)
+			print(c[n+1])
+			print(np.sum(bet * p * A, axis=1) )
+			print("ho!")
+			debug=False
 
 	# compute results
 	gamma = alpha_ * beta_
-	xi = np.zeros((N, K, K))
+	xi = np.zeros((N-1, K, K))
 	for n in range(1, N):
-		xi[n-1,:,:] = c[n]*np.expand_dims(alpha_[n-1,:],axis=1)*np.expand_dims(p_x_given_z[n,:],axis=0)*A*np.expand_dims(beta_[n,:],axis=0)
+		xi[n-1,:,:] = (1/c[n])*np.expand_dims(alpha_[n-1,:],axis=1)*np.expand_dims(p_x_given_z[n,:],axis=0)*A*np.expand_dims(beta_[n,:],axis=0)
 	avgLL = np.mean(np.log(c)) # log(P(X))/N
 
 	return gamma, xi, avgLL
@@ -159,12 +171,18 @@ def forward_backward(params, x):
 def main():
 	x, z = generate_data()
 	params = init_params(x)
-	for _ in range(100):
-		_, _, MU, SIGMA = params
-		#visualize_mixture(MU, SIGMA, x) #TODO: animate properly
+	_, _, MU, SIGMA = params
+	visualize_mixture(MU, SIGMA, x)
+	eps = 10**(-7)
+	oldLL = -10**5
+	for _ in range(20):
 		params, avgLL = em_step(params, x)
+		if avgLL - oldLL < eps:
+			break
+		oldLL = avgLL
 		print(avgLL)
 	report_params(params)
+	_, _, MU, SIGMA = params
 	visualize_mixture(MU, SIGMA, x)
 
 def report_params(params):
@@ -179,7 +197,7 @@ def visualize_mixture(MU, SIGMA, x):
 	KEY_COLORS = 0.99*np.array([[1,0,0], [0,1,0], [0,0,1]])
 	fig = plt.figure(0)
 	ax = fig.add_subplot(111, aspect='equal')
-	ax.scatter(x[:,0], x[:,1])
+	ax.scatter(x[:,0], x[:,1], marker='.')
 	# make cluster ellipse
 	for k in range(K):
 		u, sig, vh = np.linalg.svd(SIGMA[k])
@@ -190,5 +208,6 @@ def visualize_mixture(MU, SIGMA, x):
 		e.set_facecolor(KEY_COLORS[k])
 		ax.add_artist(e)
 	plt.show()
+
 
 main()
