@@ -6,6 +6,7 @@ import matplotlib.animation as anim
 from scipy.stats import multivariate_normal
 import time
 import itertools
+from match_labels import match_misassigned_labels
 
 ## model dimensions
 K = 3 # number of latent states
@@ -220,17 +221,9 @@ def run_viterbi(x, params):
 	return z_opt
 
 def report_accuracy(z_true, z_pred):
-	max_correct = 0
-	for perm in itertools.permutations(range(K)):
-		perm = np.array(perm)
-		z_pred_perm = perm[z_pred]
-		n_correct = np.sum(1.*(z_true == z_pred_perm))
-		if n_correct > max_correct:
-			max_correct = n_correct
-	accuracy = max_correct/N
+	accuracy, perm = match_misassigned_labels(z_true, z_pred)
 	print("Hidden state prediction accuracy:")
 	print("%.03f  "%(accuracy))
-
 
 def main():
 	x, z_true = generate_data()
