@@ -30,7 +30,7 @@ def generate_data():
 		[0.3, 0.2],
 		[0.7, 0.5]
 	])
-	PHI_SIGMA = 0.01*np.array([
+	PHI_SIGMA = 0.04*np.array([
 		[[0.5, 0.4], [0.4, 0.5]],
 		[[0.5, 0.0], [0.0, 0.2]],
 		[[0.5, -0.4], [-0.4, 0.5]]
@@ -107,6 +107,13 @@ def em_step(old_params, x):
 	new_params = (pi, A, MU, SIGMA)
 	return new_params, avgLL
 
+def get_p_x_given_z(x, MU, SIGMA):
+	p_x_given_z = np.zeros((N, K))
+	for n in range(N):
+		for k in range(K):
+			p_x_given_z[n, k] = multivariate_normal.pdf(x[n,:], mean=MU[k,:], cov=SIGMA[k,:,:])
+	return p_x_given_z
+
 def forward_backward(params, x):
 	'''
 	<input>
@@ -125,12 +132,8 @@ def forward_backward(params, x):
 	alpha_ = np.zeros((N, K))
 	beta_ = np.zeros((N, K))
 	c = np.zeros((N))
-	p_x_given_z = np.zeros((N, K)) # can be computed rightaway
-	
-	# compute p_x_given_z
-	for n in range(N):
-		for k in range(K):
-			p_x_given_z[n, k] = multivariate_normal.pdf(x[n,:], mean=MU[k,:], cov=SIGMA[k,:,:])
+
+	p_x_given_z = get_p_x_given_z(x, MU, SIGMA)
 
 	# compute alpha_ (rescaled) and c
 	unnorm = pi * p_x_given_z[0, :]
@@ -168,25 +171,12 @@ def forward_backward(params, x):
 
 	return gamma, xi, avgLL
 
-def main():
-	x, z = generate_data()
-	params = init_params(x)
-	_, _, MU, SIGMA = params
-	visualize_mixture(MU, SIGMA, x)
-	eps = 10**(-7)
-	oldLL = -10**5
-	for _ in range(20):
-		params, avgLL = em_step(params, x)
-		if avgLL - oldLL < eps:
-			break
-		oldLL = avgLL
-		print(avgLL)
-	report_params(params)
-	_, _, MU, SIGMA = params
-	visualize_mixture(MU, SIGMA, x)
-
 def report_params(params):
 	pi, A, MU, SIGMA = params
+	print("Initial distribution:")
+	for k in range(K):
+		print("%.03f  "%(pi[k]), end="")
+	print("")
 	print("Transition probabilities:")
 	for j in range(K):
 		for k in range(K):
@@ -209,5 +199,49 @@ def visualize_mixture(MU, SIGMA, x):
 		ax.add_artist(e)
 	plt.show()
 
+def run_viterbi(x, params):
+	pi, A, MU, SIGMA = params
+	z_opt = None
+	omega = np.zeros((N, K))
+	preds = np.zeros((N, K), dtype=np.uint8)
+	# initialize
+	p_x_given_z = get_p_x_given_z(x, MU, SIGMA)
+	omega[0, :] = np.log(pi) + np.log(p_x_given_z[0, :])
+	preds[0, :] = -1
+	for n in range(1, N):
+		interm = np.expand_dims(p_x_given_z[n, :],axis=0)+A+np.expand_dims(omega[n-1, :],axis=1)
+		preds[n, :] = np.argmax(interm, axis=0)
+		omega[n, :] = np.max(interm, axis=0)
+	z_opt = np.zeros(N, dtype=np.uint8)
+	z_opt[N-1] = np.argmax(preds[N-1, :])
+	for n in range(N-1, 0, -1): # N-1 ~ 1
+		z_opt[n-1] = preds[n, z_opt[n]]
+	return z_opt
+
+def report_accuracy(z_true, z_pred):
+	n_correct = np.sum(1.*(z_true == z_pred))
+	accuracy = n_correct/N
+	print("Hidden state prediction accuracy:")
+	print("%.03f  "%(accuracy))
+
+
+def main():
+	x, z_true = generate_data()
+	params = init_params(x)
+	_, _, MU, SIGMA = params
+	#visualize_mixture(MU, SIGMA, x)
+	eps = 10**(-7)
+	oldLL = -10**5
+	for _ in range(20):
+		params, avgLL = em_step(params, x)
+		if avgLL - oldLL < eps:
+			break
+		oldLL = avgLL
+		print(avgLL)
+	report_params(params)
+	_, _, MU, SIGMA = params
+	#visualize_mixture(MU, SIGMA, x)
+	z_pred = run_viterbi(x, params)
+	report_accuracy(z_true, z_pred)
 
 main()
