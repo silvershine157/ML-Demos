@@ -8,14 +8,12 @@ import time
 import itertools
 from match_labels import match_misassigned_labels
 
-## model dimensions
-K = 3 # number of latent states
-N = 1000 # number of data points
-D = 2 # dimension of a data point
+def generate_example_data():
+	## model dimensions
+	K = 3 # number of latent states
+	N = 1000 # number of data points
+	D = 2 # dimension of a data point
 
-# np.random.seed(2)
-
-def generate_data():
 	## true model parameters
 	# p(z_0): initial distribution
 	PI = np.array([0.2, 0.5, 0.3])
@@ -61,7 +59,10 @@ def visualize_data(x, z=None):
 		plt.scatter(x[:, 0], x[:, 1])
 		plt.show()
 
-def init_params(x):
+def init_params(x, K):
+
+	N, D = x.shape
+
 	pi = np.ones((K))/K
 	A = np.ones((K, K))/K
 
@@ -90,7 +91,9 @@ def em_step(old_params, x):
 	
 	# E-step
 	gamma, xi, avgLL = forward_backward(old_params, x)
-	
+	N, D = x.shape
+	_, K = gamma.shape
+
 	# M-step
 	pi = gamma[0, :]/np.sum(gamma[0, :])
 	A_ = np.sum(xi, axis=0) # (n-1, prev, current)
@@ -110,6 +113,8 @@ def em_step(old_params, x):
 	return new_params, avgLL
 
 def get_p_x_given_z(x, MU, SIGMA):
+	N, D = x.shape
+	K, _ = MU.shape
 	p_x_given_z = np.zeros((N, K))
 	for n in range(N):
 		for k in range(K):
@@ -131,6 +136,8 @@ def forward_backward(params, x):
 	avgLL: scalar
 	'''
 	pi, A, MU, SIGMA = params
+	K = pi.size
+	N, D = x.shape
 	alpha_ = np.zeros((N, K))
 	beta_ = np.zeros((N, K))
 	c = np.zeros((N))
@@ -175,6 +182,7 @@ def forward_backward(params, x):
 
 def report_params(params):
 	pi, A, MU, SIGMA = params
+	K = pi.size
 	print("Initial distribution:")
 	for k in range(K):
 		print("%.03f  "%(pi[k]), end="")
@@ -185,7 +193,8 @@ def report_params(params):
 			print("%.03f  "%(A[j, k]), end="")
 		print("")
 
-def visualize_mixture(MU, SIGMA, x):	
+def visualize_mixture(MU, SIGMA, x):
+	K, D = MU.shape
 	KEY_COLORS = 0.99*np.array([[1,0,0], [0,1,0], [0,0,1]])
 	fig = plt.figure(0)
 	ax = fig.add_subplot(111, aspect='equal')
@@ -202,7 +211,9 @@ def visualize_mixture(MU, SIGMA, x):
 	plt.show()
 
 def run_viterbi(x, params):
+	N, D = x.shape
 	pi, A, MU, SIGMA = params
+	K = pi.size
 	z_opt = None
 	omega = np.zeros((N, K))
 	preds = np.zeros((N, K), dtype=np.uint8)
@@ -225,11 +236,11 @@ def report_accuracy(z_true, z_pred):
 	print("Hidden state prediction accuracy:")
 	print("%.03f  "%(accuracy))
 
-def main():
-	x, z_true = generate_data()
-	params = init_params(x)
+def test1():
+	x, z_true = generate_example_data()
+	params = init_params(x, K=3)
 	_, _, MU, SIGMA = params
-	#visualize_mixture(MU, SIGMA, x)
+	visualize_mixture(MU, SIGMA, x)
 	eps = 10**(-7)
 	oldLL = -10**5
 	for _ in range(20):
@@ -240,8 +251,8 @@ def main():
 		print(avgLL)
 	report_params(params)
 	_, _, MU, SIGMA = params
-	#visualize_mixture(MU, SIGMA, x)
+	visualize_mixture(MU, SIGMA, x)
 	z_pred = run_viterbi(x, params)
 	report_accuracy(z_true, z_pred)
 
-main()
+test1()
