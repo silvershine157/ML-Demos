@@ -3,12 +3,17 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.patches import Ellipse
 import matplotlib.animation as anim
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, invwishart
 import time
 import itertools
 from match_labels import match_misassigned_labels
 
+visualize=True
+
+
 def generate_example_data():
+	# Data similar to the example in PRML textbook HMM section
+
 	## model dimensions
 	K = 3 # number of latent states
 	N = 1000 # number of data points
@@ -193,12 +198,15 @@ def report_params(params):
 			print("%.03f  "%(A[j, k]), end="")
 		print("")
 
-def visualize_mixture(MU, SIGMA, x):
+def visualize_mixture(MU, SIGMA, x=None):
 	K, D = MU.shape
+	if D != 2 or K !=3 or not visualize:
+		return
 	KEY_COLORS = 0.99*np.array([[1,0,0], [0,1,0], [0,0,1]])
 	fig = plt.figure(0)
 	ax = fig.add_subplot(111, aspect='equal')
-	ax.scatter(x[:,0], x[:,1], marker='.')
+	if x != None:
+		ax.scatter(x[:,0], x[:,1], marker='.')
 	# make cluster ellipse
 	for k in range(K):
 		u, sig, vh = np.linalg.svd(SIGMA[k])
@@ -255,4 +263,23 @@ def test1():
 	z_pred = run_viterbi(x, params)
 	report_accuracy(z_true, z_pred)
 
-test1()
+def test2():
+	D = 2
+	K = 3
+
+	# NIW parameters
+	mu0 = np.zeros(D)+0.5
+	lmbda = 0.1
+	Psi = 0.01*np.eye(D)
+	nu = D+3
+
+	MU = np.zeros((K, D))
+	SIGMA = np.zeros((K, D, D))
+	for k in range(K):
+		Sigma = invwishart.rvs(df=nu, scale=Psi)
+		mu = multivariate_normal.rvs(mean=mu0, cov=(1/lmbda)*Sigma)
+		MU[k, :] = mu
+		SIGMA[k, :, :] = Sigma
+	visualize_mixture(MU, SIGMA)
+
+test2()
