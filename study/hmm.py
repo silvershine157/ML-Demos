@@ -3,15 +3,38 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.patches import Ellipse
 import matplotlib.animation as anim
-from scipy.stats import multivariate_normal, invwishart
+from scipy.stats import multivariate_normal, invwishart, dirichlet
 import time
 import itertools
 from match_labels import match_misassigned_labels
 
 visualize=True
 
+def generate_random_hmm():
+	D = 2
+	K = 3
+	alpha = 1.0 # uniform Dirichlet parameter
+	# NIW parameters
+	mu0 = np.zeros(D)+0.5
+	lmbda = 0.1
+	Psi = 0.01*np.eye(D)
+	nu = D+3
 
-def generate_example_data():
+	diri = dirichlet(alpha=alpha*np.ones(K))
+	pi = diri.rvs().flatten()
+	A = diri.rvs(size=3)
+	MU = np.zeros((K, D))
+	SIGMA = np.zeros((K, D, D))
+	for k in range(K):
+		Sigma = invwishart.rvs(df=nu, scale=Psi)
+		mu = multivariate_normal.rvs(mean=mu0, cov=(1/lmbda)*Sigma)
+		MU[k, :] = mu
+		SIGMA[k, :, :] = Sigma
+
+	params = (pi, A, MU, SIGMA)
+	return params
+
+def generate_example_hmm():
 	# Data similar to the example in PRML textbook HMM section
 
 	## model dimensions
@@ -21,7 +44,7 @@ def generate_example_data():
 
 	## true model parameters
 	# p(z_0): initial distribution
-	PI = np.array([0.2, 0.5, 0.3])
+	pi = np.array([0.2, 0.5, 0.3])
 	# p(z_n | z_{n-1}): transition matrix
 	
 	A = np.array([
@@ -30,25 +53,31 @@ def generate_example_data():
 		[0.1, 0.05, 0.85]
 	])
 	# p(x_n | z_n): D-dim gaussian
-	PHI_MU = np.array([
+	MU = np.array([
 		[0.3, 0.7],
 		[0.3, 0.2],
 		[0.7, 0.5]
 	])
-	PHI_SIGMA = 0.04*np.array([
+	SIGMA = 0.04*np.array([
 		[[0.5, 0.4], [0.4, 0.5]],
 		[[0.5, 0.0], [0.0, 0.2]],
 		[[0.5, -0.4], [-0.4, 0.5]]
 	])
-	## generate data
+	params = (pi, A, MU, SIGMA)
+	return params
+
+def generate_hmm_samples(params, N):
+	pi, A, MU, SIGMA = params
+	K, D = MU.shape
 	z = np.zeros((N), dtype=np.int16)
 	x = np.zeros((N, D), dtype=np.float32)
-	z[0] = np.random.choice(K, p=PI)
-	x[0] = np.random.multivariate_normal(PHI_MU[z[0]], PHI_SIGMA[z[0]])
+	z[0] = np.random.choice(K, p=pi)
+	x[0] = np.random.multivariate_normal(MU[z[0]], SIGMA[z[0]])
 	for n in range(1, N):
 		z[n] = np.random.choice(K, p=A[z[n-1], :])
-		x[n] = np.random.multivariate_normal(PHI_MU[z[n]], PHI_SIGMA[z[n]])
+		x[n] = np.random.multivariate_normal(MU[z[n]], SIGMA[z[n]])
 	return x, z
+
 
 def visualize_data(x, z=None):
 	if z is not None:
@@ -205,7 +234,7 @@ def visualize_mixture(MU, SIGMA, x=None):
 	KEY_COLORS = 0.99*np.array([[1,0,0], [0,1,0], [0,0,1]])
 	fig = plt.figure(0)
 	ax = fig.add_subplot(111, aspect='equal')
-	if x != None:
+	if x is not None:
 		ax.scatter(x[:,0], x[:,1], marker='.')
 	# make cluster ellipse
 	for k in range(K):
@@ -245,7 +274,9 @@ def report_accuracy(z_true, z_pred):
 	print("%.03f  "%(accuracy))
 
 def test1():
-	x, z_true = generate_example_data()
+	N = 1000
+	true_params = generate_random_hmm()
+	x, z_true = generate_hmm_samples(true_params, N)
 	params = init_params(x, K=3)
 	_, _, MU, SIGMA = params
 	visualize_mixture(MU, SIGMA, x)
@@ -282,4 +313,8 @@ def test2():
 		SIGMA[k, :, :] = Sigma
 	visualize_mixture(MU, SIGMA)
 
-test2()
+def test3():
+	generate_random_data()
+	pass
+
+test1()
