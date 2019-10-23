@@ -235,7 +235,7 @@ def visualize_mixture(MU, SIGMA, x=None):
 	fig = plt.figure(0)
 	ax = fig.add_subplot(111, aspect='equal')
 	if x is not None:
-		ax.scatter(x[:,0], x[:,1], marker='.')
+		ax.scatter(x[:,0], x[:,1], marker='.', c=[[0, 0, 0, 0.2]])
 	# make cluster ellipse
 	for k in range(K):
 		u, sig, vh = np.linalg.svd(SIGMA[k])
@@ -312,9 +312,5 @@ def test2():
 		MU[k, :] = mu
 		SIGMA[k, :, :] = Sigma
 	visualize_mixture(MU, SIGMA)
-
-def test3():
-	generate_random_data()
-	pass
 
 test1()
