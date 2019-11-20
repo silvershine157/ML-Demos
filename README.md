@@ -1,2 +1,2 @@
-# ML_Practice
-Repository for practicing machine learning
+# ML-Demo
+Implementations of machine learning techniques
