@@ -6,7 +6,6 @@ class Experiment():
 		self.sub_exprs = []
 		self.args = args
 		self.local_id = self.make_local_id()
-		# self.add_exprs(SubExperiment(sub_args))
 
 	def make_local_id(self):
 		return "default_id"
@@ -41,9 +40,12 @@ class L2RegTuningExp(Experiment):
 		}
 		super(RegularizationExp, self).__init__(args)
 		for n in range(n_lambdas):
-			lmbda = 0.0
+			lmbda = min_lmbda * (factor**n)
 			sub_expr = MNISTExp(lmbda)
 			self.add_expr(sub_expr)
+
+	def make_local_id(self):
+		return "L2RegTuning"
 
 	def produce_result(self, sub_results, log_dir):
 		result = []
@@ -51,7 +53,7 @@ class L2RegTuningExp(Experiment):
 			lmbda = sub_res["lmbda"]
 			test_accuracy = sub_res["test_accruacy"]
 			result.append((lmbda, test_accruacy))
-		# write log
+		# TODO: write log
 		return result
 
 
@@ -64,14 +66,17 @@ class MNISTExp(Experiment):
 		super(MNISTExp, self).__init__(args)
 		# no subexperiments
 
+	def make_local_id(self):
+		return "mnist_lmbda_{0}".format(self.args["lmbda"])
+
 	def produce_result(self, sub_results, log_dir):
 		result = {}
 		lmbda = self.args["lmbda"]
 
-		# train and test with lmbda, write log
-
+		# TODO: perform experiment with lmbda, write log
+		
 		test_accuracy = 0.0
 		result["lmbda"] = lmbda
 		result["test_accuracy"] = test_accuracy
-		# write log
+		# TODO: write log
 		return result
