@@ -47,7 +47,7 @@ class L2RegTuningExp(Experiment):
 		for n in range(n_lambdas):
 			lmbda = min_lmbda * (factor**n)
 			# TODO: obtain confidence interval
-			sub_expr = BostonExp(lmbda)
+			sub_expr = BostonMultiExp(lmbda)
 			self.add_expr(sub_expr)
 
 	def make_local_id(self):
@@ -57,16 +57,42 @@ class L2RegTuningExp(Experiment):
 		result = []
 		for sub_res in sub_results:
 			lmbda = sub_res["lmbda"]
-			test_accuracy = sub_res["test_accuracy"]
-			result.append((lmbda, test_accuracy))
+			ci_low = sub_res["ci_low"]
+			ci_high = sub_res["ci_high"]
+			result.append((lmbda, ci_low, ci_high))
 		# TODO: write log
 		return result
 
-
-class BostonExp(Experiment):
+class BostonMultiExp(Experiment):
 
 	def __init__(self, lmbda):
 		args = {
+			"lmbda": lmbda
+		}
+		super(BostonMultiExp, self).__init__(args)
+		for trial in range(5):
+			sub_expr = BostonExp(lmbda, trial)
+			self.add_expr(sub_expr)
+
+	def make_local_id(self):
+		return "lmbda_{0}".format(self.args["lmbda"])
+
+	def produce_result(self, sub_results, log_dir):
+		perf_list = []
+		for sub_res in sub_results:
+			perf = sub_res["test_perf"]
+			perf_list.append(perf)
+		result = {}
+		result["lmbda"] = self.args["lmbda"]
+		result["ci_low"] = min(perf_list) # TODO: obtain confidence interval
+		result["ci_high"] = max(perf_list)
+		return result
+
+class BostonExp(Experiment):
+
+	def __init__(self, lmbda, trial):
+		args = {
+			"trial": trial,
 			"lmbda": lmbda,
 			"batch_size": 128
 		}
@@ -74,7 +100,7 @@ class BostonExp(Experiment):
 		# no subexperiments
 
 	def make_local_id(self):
-		return "boston_lmbda_{0}".format(self.args["lmbda"])
+		return "trial_{0}".format(self.args["trial"])
 
 	def produce_result(self, sub_results, log_dir):
 		result = {}
@@ -86,10 +112,7 @@ class BostonExp(Experiment):
 		train_info = train_model(net, train_loader, val_loader, expr=self)
 		test_info = test_model(net, test_loader, expr=self)
 		
-		test_accuracy = 0.0
-		result["lmbda"] = lmbda
-		result["test_accuracy"] = test_accuracy
-		# TODO: write log
+		result["test_perf"] = test_info["test_perf"]
 		return result
 
 

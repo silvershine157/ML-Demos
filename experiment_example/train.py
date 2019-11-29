@@ -40,7 +40,8 @@ def test_model(net, test_loader, expr=None):
 	test_loss = test_epoch(net, test_loader)
 	log("test loss: {0}".format(test_loss), expr)
 
-	test_info = None
+	test_info = {}
+	test_info["test_perf"] = test_loss
 	return test_info
 
 
