@@ -46,6 +46,7 @@ class L2RegTuningExp(Experiment):
 		super(L2RegTuningExp, self).__init__(args)
 		for n in range(n_lambdas):
 			lmbda = min_lmbda * (factor**n)
+			# TODO: obtain confidence interval
 			sub_expr = BostonExp(lmbda)
 			self.add_expr(sub_expr)
 
@@ -94,7 +95,7 @@ class BostonExp(Experiment):
 
 def test():
 	os.system("rm -rf results")
-	expr = L2RegTuningExp(min_lmbda=0.1, factor=10., n_lambdas=3)
+	expr = L2RegTuningExp(min_lmbda=0.001, factor=10., n_lambdas=5)
 	expr.run("results")
 	
 

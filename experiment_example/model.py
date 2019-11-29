@@ -5,7 +5,7 @@ class MLP(nn.Module):
 	# simple 2 layer MLP
 	def __init__(self, d_input):
 		super(MLP, self).__init__()
-		d_hidden = 3*(d_input+3)
+		d_hidden = 200
 		self.layers=nn.Sequential(
 			nn.Linear(d_input, d_hidden),
 			nn.ReLU(),

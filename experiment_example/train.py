@@ -11,18 +11,21 @@ def mse_loss(y_h, y):
 
 def train_model(net, train_loader, val_loader, expr=None):
 	
-	lr=0.01
+	lr=0.001
 	epochs=2000
 	print_every=500
 	validate_every=500
+	if expr:
+		lmbda=expr.args["lmbda"]
 
 	log("Training model", expr)
 	net.train()
-	optimizer = optim.Adam(net.parameters(), lr=lr)
+	optimizer = optim.Adam(net.parameters(), lr=lr, weight_decay=lmbda)
 	for epoch in range(1, epochs+1):
 		train_loss = train_epoch(net, train_loader, optimizer)
 		if epoch % print_every == 0:
 			log("(Epoch {0}) Training loss: {1}".format(epoch, train_loss), expr)
+			# TODO: use averaged loss
 		if epoch % validate_every == 0:
 			val_loss = test_epoch(net, val_loader)
 			log("Validation loss: {1}".format(epoch, val_loss), expr)
