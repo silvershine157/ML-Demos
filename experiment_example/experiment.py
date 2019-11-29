@@ -94,7 +94,7 @@ class BostonExp(Experiment):
 		args = {
 			"trial": trial,
 			"lmbda": lmbda,
-			"batch_size": 128
+			"batch_size": 64
 		}
 		super(BostonExp, self).__init__(args)
 		# no subexperiments
@@ -118,7 +118,7 @@ class BostonExp(Experiment):
 
 def test():
 	os.system("rm -rf results")
-	expr = L2RegTuningExp(min_lmbda=0.001, factor=10., n_lambdas=5)
+	expr = L2RegTuningExp(min_lmbda=0.01, factor=10., n_lambdas=3)
 	expr.run("results")
 	
 
