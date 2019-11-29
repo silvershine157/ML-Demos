@@ -16,10 +16,10 @@ class Experiment():
 	def run(self, log_dir):
 		sub_results = []
 		for sub_expr in self.sub_exprs:
-			sub_dir = os.join(log_dir, self.local_id)
+			sub_dir = os.path.join(log_dir, sub_expr.local_id)
 			os.makedirs(sub_dir)
 			sub_res = sub_expr.run(sub_dir)
-			results.append(sub_res)
+			sub_results.append(sub_res)
 		result = self.produce_result(sub_results, log_dir)
 		return result
 
@@ -38,7 +38,7 @@ class L2RegTuningExp(Experiment):
 			"factor":factor,
 			"n_lambdas": n_lambdas
 		}
-		super(RegularizationExp, self).__init__(args)
+		super(L2RegTuningExp, self).__init__(args)
 		for n in range(n_lambdas):
 			lmbda = min_lmbda * (factor**n)
 			sub_expr = MNISTExp(lmbda)
@@ -51,8 +51,8 @@ class L2RegTuningExp(Experiment):
 		result = []
 		for sub_res in sub_results:
 			lmbda = sub_res["lmbda"]
-			test_accuracy = sub_res["test_accruacy"]
-			result.append((lmbda, test_accruacy))
+			test_accuracy = sub_res["test_accuracy"]
+			result.append((lmbda, test_accuracy))
 		# TODO: write log
 		return result
 
@@ -74,9 +74,19 @@ class MNISTExp(Experiment):
 		lmbda = self.args["lmbda"]
 
 		# TODO: perform experiment with lmbda, write log
+		# prepare data
+		# make data loader
+		# train loop
+		# test
 		
 		test_accuracy = 0.0
 		result["lmbda"] = lmbda
 		result["test_accuracy"] = test_accuracy
 		# TODO: write log
 		return result
+
+def test():
+	expr = L2RegTuningExp(min_lmbda=0.1, factor=10., n_lambdas=3)
+	expr.run("results")
+
+test()
