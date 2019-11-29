@@ -1,5 +1,8 @@
 import os
 from dataset import *
+from model import *
+from train import *
+from utils import *
 
 class Experiment():
 
@@ -15,6 +18,7 @@ class Experiment():
 		self.sub_exprs.append(expr)
 
 	def run(self, log_dir):
+		log("Starting experiment: "+log_dir, self)
 		sub_results = []
 		for sub_expr in self.sub_exprs:
 			sub_dir = os.path.join(log_dir, sub_expr.local_id)
@@ -22,6 +26,7 @@ class Experiment():
 			sub_res = sub_expr.run(sub_dir)
 			sub_results.append(sub_res)
 		result = self.produce_result(sub_results, log_dir)
+		log("Exiting experiment: "+log_dir, self)
 		return result
 
 	def produce_result(self, sub_results, log_dir):
@@ -62,7 +67,7 @@ class BostonExp(Experiment):
 	def __init__(self, lmbda):
 		args = {
 			"lmbda": lmbda,
-			"batch_size": 8
+			"batch_size": 128
 		}
 		super(BostonExp, self).__init__(args)
 		# no subexperiments
@@ -76,7 +81,9 @@ class BostonExp(Experiment):
 
 		data = prepare_data()
 		train_loader, val_loader, test_loader = get_dataloader(data, self.args["batch_size"])
-		
+		net = MLP(d_input=data["train_X"].shape[1])
+		train_info = train_model(net, train_loader, val_loader, expr=self)
+		test_info = test_model(net, test_loader, expr=self)
 		
 		test_accuracy = 0.0
 		result["lmbda"] = lmbda
@@ -86,6 +93,7 @@ class BostonExp(Experiment):
 
 
 def test():
+	os.system("rm -rf results")
 	expr = L2RegTuningExp(min_lmbda=0.1, factor=10., n_lambdas=3)
 	expr.run("results")
 	

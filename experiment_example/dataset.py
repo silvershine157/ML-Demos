@@ -1,12 +1,14 @@
 from sklearn.datasets import load_boston
 import numpy as np
+import torch
 from torch.utils.data import random_split, Dataset, DataLoader
 
 def prepare_data():
 	boston = load_boston()
 	X = boston.data
 	Y = boston.target
-	train_X, train_Y, test_X, test_Y = split_train_test(X, Y)
+	Y = np.reshape(Y, (-1, 1))
+	train_X, train_Y, test_X, test_Y = shuffle_and_split(X, Y)
 	data = {}
 	data["train_X"] = train_X
 	data["train_Y"] = train_Y
@@ -14,14 +16,18 @@ def prepare_data():
 	data["test_Y"] = test_Y
 	return data
 
-def split_train_test(X, Y):
+def shuffle_and_split(X, Y):
+	X_Y = np.concatenate((X, Y), axis=1)
+	np.random.shuffle(X_Y)
+	X = X_Y[:, :-1]
+	Y = X_Y[:, -1].reshape(-1, 1)
 	train_ratio = 0.8
 	n = X.shape[0]
 	n_train = int(train_ratio * n)
 	train_X = X[:n_train, :]
 	train_Y = Y[:n_train]
 	test_X = X[n_train:, :]
-	test_Y = Y[n_train:]	
+	test_Y = Y[n_train:]
 	return (train_X, train_Y, test_X, test_Y)
 
 class BostonDataset(Dataset):
@@ -33,6 +39,7 @@ class BostonDataset(Dataset):
 	def __getitem__(self, idx):
 		x = torch.from_numpy(self.X[idx, :]).type(torch.FloatTensor)
 		y = torch.from_numpy(self.Y[idx]).type(torch.FloatTensor)
+		return {"x":x, "y":y}
 
 def get_dataloader(data, batch_size):
 	
