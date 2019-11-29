@@ -1,4 +1,5 @@
 __pycache__/
 data/
+results/
 tensorflow/cs20si/assignments/2/
 *.swp
