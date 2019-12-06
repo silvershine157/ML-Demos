@@ -9,12 +9,25 @@ def prepare_data():
 	Y = boston.target
 	Y = np.reshape(Y, (-1, 1))
 	train_X, train_Y, test_X, test_Y = shuffle_and_split(X, Y)
+	train_X, train_Y, mu, sigma = rescale_data(train_X, train_Y)
+	test_X, test_Y, _, _ = rescale_data(test_X, test_Y, mu, sigma)
 	data = {}
 	data["train_X"] = train_X
 	data["train_Y"] = train_Y
 	data["test_X"] = test_X
 	data["test_Y"] = test_Y
 	return data
+
+def rescale_data(X, Y, mu=None, sigma=None):
+	X_Y = np.concatenate((X, Y), axis=1)
+	if mu is None or sigma is None:
+		mu = np.mean(X_Y, axis=0)
+		sigma = np.std(X_Y, axis=0)
+	X_Y = (X_Y - mu)/(sigma + 1.0E-7)
+	X = X_Y[:, :-1]
+	Y = X_Y[:, -1].reshape(-1, 1)
+	return X, Y, mu, sigma
+
 
 def shuffle_and_split(X, Y):
 	X_Y = np.concatenate((X, Y), axis=1)
@@ -64,4 +77,3 @@ def test():
 	data = prepare_data()
 	train_loader, val_loader, test_loader = get_dataloader(data, 4)
 
-test()
