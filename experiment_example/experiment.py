@@ -36,7 +36,6 @@ class Experiment():
 
 
 class L2RegTuningExp(Experiment):
-
 	def __init__(self, min_lmbda, factor, n_lambdas):
 		args = {
 			"min_lmbda":min_lmbda,
@@ -118,8 +117,11 @@ class BostonExp(Experiment):
 
 def test():
 	os.system("rm -rf results")
-	expr = L2RegTuningExp(min_lmbda=0.01, factor=10., n_lambdas=3)
+	expr = L2RegTuningExp(min_lmbda=0.1, factor=10., n_lambdas=3)
 	expr.run("results")
-	
+
+
+
+
 
 test()

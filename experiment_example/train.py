@@ -12,9 +12,9 @@ def mse_loss(y_h, y):
 def train_model(net, train_loader, val_loader, expr=None):
 	
 	lr=0.001
-	epochs=1500
-	print_every=500
-	validate_every=500
+	epochs=10000
+	print_every=1000
+	validate_every=1000
 	if expr:
 		lmbda=expr.args["lmbda"]
 
@@ -24,10 +24,10 @@ def train_model(net, train_loader, val_loader, expr=None):
 	for epoch in range(1, epochs+1):
 		train_loss = train_epoch(net, train_loader, optimizer)
 		if epoch % print_every == 0:
-			log("(Epoch {0}) Training loss: {1}".format(epoch, train_loss), expr)
+			log("(Epoch {0}) Training loss: {1:.4}".format(epoch, train_loss), expr)
 		if epoch % validate_every == 0:
 			val_loss = test_epoch(net, val_loader)
-			log("Validation loss: {1}".format(epoch, val_loss), expr)
+			log("Validation loss: {1:.4}".format(epoch, val_loss), expr)
 
 	train_info = None
 	return train_info
@@ -37,7 +37,7 @@ def test_model(net, test_loader, expr=None):
 	log("Training model", expr)
 	net.eval()
 	test_loss = test_epoch(net, test_loader)
-	log("test loss: {0}".format(test_loss), expr)
+	log("test loss: {0:.4}".format(test_loss), expr)
 
 	test_info = {}
 	test_info["test_perf"] = test_loss
