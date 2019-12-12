@@ -1,16 +1,17 @@
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from torch.distributions import MultivariateNormal
 
 def generate_task():
 	# sample ground truth parameters from a distribution
 	# learning this distribution is the objective of meta learning
-	w = 5.0
+	w = -2.0
 	#b = np.random.normal(0.0, 0.3)
-	b = 0.0
-	params = (w, b)
-	N_train = 100
-	N_val = 50
+	b = -2.0
+	params = torch.FloatTensor([w, b])
+	N_train = 10
+	N_val = 5
 	D_train = generate_task_data(N_train, params)
 	D_val = generate_task_data(N_val, params)
 	return D_train, D_val
@@ -22,7 +23,7 @@ def generate_task_data(n_samples, params):
 	Y = torch.zeros((n_samples*2, 1))
 	# this is better than X|Y since the true Y|X is in our model space
 	while (min(cnt_c0, cnt_c1) < n_samples):
-		x = torch.FloatTensor(np.random.normal(0.0, 1.0, [1, 1]))
+		x = torch.FloatTensor(np.random.normal(0.0, 5.0, [1, 1]))
 		prob = model(x, params)
 		y = None
 		if np.random.rand() < prob:
@@ -53,7 +54,7 @@ def avgLL(params, D):
 def vanila_train(D_train, old_params):
 	params = old_params.clone()
 	params.requires_grad_(True)
-	optimizer = torch.optim.SGD([params], lr=1.)
+	optimizer = torch.optim.SGD([params], lr=1.0)
 	n_epochs = 1000
 	for epoch in range(n_epochs):
 		negLL = -avgLL(params, D_train)
@@ -66,10 +67,59 @@ def model(X, params):
 	w, b = params
 	return 1.0/(1.0 + torch.exp(-w*(X-b)))
 
-def test():
+def test_vanila():
 	D_train, D_val = generate_task()
-	initial_params = torch.FloatTensor([-5.0, 1.0])
+	initial_params = torch.FloatTensor([0.0, 0.0])
 	new_params = vanila_train(D_train, initial_params)
 	print(new_params)
 
-test()
+def log_prior(params):
+	m = MultivariateNormal(torch.zeros(2), 25.0*torch.eye(2))
+	return m.log_prob(params)
+
+def unnorm_log_posterior(params, D):
+	X, Y = D
+	n_samples = X.size(0)
+	log_likelihood = n_samples*avgLL(params, D)
+	return log_likelihood #+ log_prior(params)
+
+def test_posterior_sampling():
+	# estimate posterior using samples 
+	D_train, D_val = generate_task()
+	# rejection sampling
+	q = MultivariateNormal(torch.zeros(2), 9.0*torch.eye(2))
+	k = 0.5
+	samples = []
+	for i in range(5000):
+		z = q.sample()
+		u = (k*torch.exp(q.log_prob(z)))*np.random.rand()
+		p_z = torch.exp(unnorm_log_posterior(z, D_train))
+		if u < p_z:
+			samples.append(z)
+		else:
+			continue
+	samples = torch.stack(samples).numpy()
+	plt.scatter(samples[:, 0], samples[:, 1])
+	plt.show()
+
+def test_posterior_grid():
+
+	D_train, D_val = generate_task()
+
+	# evaluate unnormalized posterior
+	n_grid = 30
+	grid_size = 8.
+	w_grid = np.linspace(-grid_size, grid_size, n_grid)
+	b_grid = np.linspace(-grid_size, grid_size, n_grid)
+	ulp_values = np.zeros((n_grid, n_grid))
+	for w_i, w in enumerate(w_grid):
+		for b_i, b in enumerate(b_grid):
+			ulp_values[w_i, b_i] = unnorm_log_posterior(torch.Tensor([w, b]), D_train)
+	up_values = np.exp(ulp_values) # correct up to multiplication constant
+
+	res_img = np.transpose(up_values)
+	res_img = np.flip(res_img, axis=0)
+	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
+	plt.show()
+
+test_posterior_grid()
