@@ -6,11 +6,14 @@ from torch.distributions import MultivariateNormal
 def generate_task():
 	# sample ground truth parameters from a distribution
 	# learning this distribution is the objective of meta learning
-	w = -2.0
-	#b = np.random.normal(0.0, 0.3)
-	b = -2.0
+	# recommended config for interesting posteriors: w = 1.0, b = 2.0, N = 5
+
+	w = np.random.normal(0.0, 2.0)
+	b = np.random.normal(0.0, 2.0)
+	# TODO: some interesting regularity to meta-learn (bimodal, sharp reject etc.)
+	
 	params = torch.FloatTensor([w, b])
-	N_train = 10
+	N_train = 5
 	N_val = 5
 	D_train = generate_task_data(N_train, params)
 	D_val = generate_task_data(N_val, params)
@@ -54,8 +57,8 @@ def avgLL(params, D):
 def vanila_train(D_train, old_params):
 	params = old_params.clone()
 	params.requires_grad_(True)
-	optimizer = torch.optim.SGD([params], lr=1.0)
-	n_epochs = 1000
+	optimizer = torch.optim.SGD([params], lr=0.1)
+	n_epochs = 5000
 	for epoch in range(n_epochs):
 		negLL = -avgLL(params, D_train)
 		optimizer.zero_grad()
@@ -74,7 +77,7 @@ def test_vanila():
 	print(new_params)
 
 def log_prior(params):
-	m = MultivariateNormal(torch.zeros(2), 25.0*torch.eye(2))
+	m = MultivariateNormal(torch.zeros(2), 16.0*torch.eye(2))
 	return m.log_prob(params)
 
 def unnorm_log_posterior(params, D):
@@ -103,12 +106,10 @@ def test_posterior_sampling():
 	plt.show()
 
 def test_posterior_grid():
-
 	D_train, D_val = generate_task()
-
 	# evaluate unnormalized posterior
 	n_grid = 30
-	grid_size = 8.
+	grid_size = 10.
 	w_grid = np.linspace(-grid_size, grid_size, n_grid)
 	b_grid = np.linspace(-grid_size, grid_size, n_grid)
 	ulp_values = np.zeros((n_grid, n_grid))
@@ -121,5 +122,10 @@ def test_posterior_grid():
 	res_img = np.flip(res_img, axis=0)
 	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
 	plt.show()
+
+def test_maml():
+	train_tasks = [generate_task() for _ in range(10)]
+	val_tasks = [generate_task() for _ in range(10)]
+
 
 test_posterior_grid()
