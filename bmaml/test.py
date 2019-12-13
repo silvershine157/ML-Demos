@@ -184,13 +184,12 @@ def maml_train(train_tasks):
 	params.requires_grad_(True)
 	optimizer = torch.optim.Adam([params], lr=0.1)
 	n_meta_iter = 100
+	n_task_iter = 2
 	for meta_iter in range(n_meta_iter):
 		meta_loss = torch.Tensor([0.0])
 		for task in train_tasks:
 			D_train, D_val = task
-			task_train_loss = -avgLL(params, D_train)
-			grad_task = grad(task_train_loss, params, create_graph=True)[0]
-			task_params = params  - 0.1*grad_task # TODO: generalize to more task-iterations
+			task_params = GD_n(D_train, params, n_task_iter)
 			task_val_loss = -avgLL(task_params, D_val)
 			meta_loss = meta_loss + task_val_loss
 		optimizer.zero_grad()
@@ -198,6 +197,15 @@ def maml_train(train_tasks):
 		optimizer.step()
 	init_params = params.detach()
 	return init_params
+
+def GD_n(D_train, old_params, n):
+	params = old_params
+	for _ in range(n):
+		train_loss = -avgLL(params, D_train)
+		task_grad = grad(train_loss, params, create_graph=True)[0]
+		params = params - 0.1 * task_grad
+	new_params = params
+	return new_params
 
 def vanila_train_autograd(D_train, old_params):
 	params = old_params.clone()
