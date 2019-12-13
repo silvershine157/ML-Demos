@@ -9,15 +9,15 @@ def generate_task(return_params=False):
 	# learning this distribution is the objective of meta learning
 	# recommended config for interesting posteriors: w = 1.0, b = 2.0, N = 5
 
-	#w = np.random.normal(0.0, 4.0)
-	#b = np.random.normal(0.0, 4.0)
-	w = -3.0
-	b = 2.0
+	w = np.random.normal(0.0, 2.0)
+	b = np.random.normal(0.0, 2.0)
+	#w = -3.0
+	#b = -2.0
 
 	# TODO: some interesting regularity to meta-learn (bimodal, sharp reject etc.)
 	
 	params = torch.FloatTensor([w, b])
-	N = 15
+	N = 10
 	D_train = generate_task_data(N, params)
 	D_val = generate_task_data(N, params)
 	if not return_params:
@@ -131,8 +131,6 @@ def demo_posterior_grid():
 	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
 	plt.show()
 
-
-
 def demo_loss_grid():
 	D_train, D_val = generate_task()
 	n_grid = 30
@@ -231,5 +229,53 @@ def demo_maml():
 	init_params = maml_train(train_tasks)
 	print(init_params)
 
+def rbf_kernel(param_1, param_2):
+	diff = param_1 - param_2
+	return torch.exp(-torch.sum(diff**2)/1.0)
 
-demo_maml()
+def demo_sgvd():
+	D_train, D_val = generate_task()
+	n_particles = 10
+	particles = torch.randn((n_particles, 2))
+	eps = 0.1
+	n_iter = 50
+	# TODO: use vector operations
+	for iteration in range(n_iter):
+		phi = torch.zeros_like(particles)
+		for i in range(n_particles):
+			par_i = particles[i, :]
+			for j in range(n_particles):
+				par_j = particles[j, :]
+				par_j.requires_grad_(True)
+				log_p_j = unnorm_log_posterior(par_j, D_train)
+				grad_log_p_j = grad(log_p_j, par_j)[0]
+				kern = rbf_kernel(par_i, par_j)
+				grad_kern_j = grad(kern, par_j)[0]
+				phi[i, :] = phi[i, :] + kern*grad_log_p_j + grad_kern_j
+		phi = phi/n_particles
+		particles = particles + eps * phi
+		particles = particles.detach()
+
+	particles = particles.detach().numpy()
+	plt.scatter(particles[:, 0], particles[:, 1])
+
+
+	n_grid = 30
+	grid_size = 10.
+	w_grid = np.linspace(-grid_size, grid_size, n_grid)
+	b_grid = np.linspace(-grid_size, grid_size, n_grid)
+	ulp_values = np.zeros((n_grid, n_grid))
+	for w_i, w in enumerate(w_grid):
+		for b_i, b in enumerate(b_grid):
+			params = torch.Tensor([w, b])
+			ulp_values[w_i, b_i] = unnorm_log_posterior(params, D_train)
+	up_values = np.exp(ulp_values) # correct up to multiplication constant
+
+	res_img = np.transpose(up_values)
+	res_img = np.flip(res_img, axis=0)
+	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
+
+
+	plt.show()
+
+demo_sgvd()
