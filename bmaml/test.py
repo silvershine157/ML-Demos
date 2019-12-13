@@ -11,7 +11,7 @@ def generate_task(return_params=False):
 
 	#w = np.random.normal(0.0, 4.0)
 	#b = np.random.normal(0.0, 4.0)
-	w = 3.0
+	w = -3.0
 	b = 2.0
 
 	# TODO: some interesting regularity to meta-learn (bimodal, sharp reject etc.)
@@ -178,26 +178,26 @@ def demo_ml_bayes_gt():
 	plt.plot(ml_w, ml_b, 'bo')
 	plt.show()
 
-'''
+
 def maml_train(train_tasks):
 	params = torch.Tensor([0.0, 0.0])
 	params.requires_grad_(True)
-	optimizer = torch.optim.SGD([params], lr=0.1)
-	n_meta_iter = 5
+	optimizer = torch.optim.Adam([params], lr=0.1)
+	n_meta_iter = 100
 	for meta_iter in range(n_meta_iter):
 		meta_loss = torch.Tensor([0.0])
 		for task in train_tasks:
 			D_train, D_val = task
 			task_train_loss = -avgLL(params, D_train)
-			grad_task = 
-			task_param =
-			meta_loss = meta_loss + (-avgLL(params, D_train))
+			grad_task = grad(task_train_loss, params, create_graph=True)[0]
+			task_params = params  - 0.1*grad_task # TODO: generalize to more task-iterations
+			task_val_loss = -avgLL(task_params, D_val)
+			meta_loss = meta_loss + task_val_loss
 		optimizer.zero_grad()
 		meta_loss.backward()
 		optimizer.step()
 	init_params = params.detach()
 	return init_params
-'''
 
 def vanila_train_autograd(D_train, old_params):
 	params = old_params.clone()
@@ -224,4 +224,4 @@ def demo_maml():
 	print(init_params)
 
 
-demo_vanila_autograd()
+demo_maml()
