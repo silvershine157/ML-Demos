@@ -2,18 +2,22 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from torch.distributions import MultivariateNormal
+from torch.autograd import grad
 
 def generate_task(return_params=False):
 	# sample ground truth parameters from a distribution
 	# learning this distribution is the objective of meta learning
 	# recommended config for interesting posteriors: w = 1.0, b = 2.0, N = 5
 
-	w = np.random.normal(0.0, 4.0)
-	b = np.random.normal(0.0, 4.0)
+	#w = np.random.normal(0.0, 4.0)
+	#b = np.random.normal(0.0, 4.0)
+	w = 3.0
+	b = 2.0
+
 	# TODO: some interesting regularity to meta-learn (bimodal, sharp reject etc.)
 	
 	params = torch.FloatTensor([w, b])
-	N = 10
+	N = 15
 	D_train = generate_task_data(N, params)
 	D_val = generate_task_data(N, params)
 	if not return_params:
@@ -73,7 +77,7 @@ def model(X, params):
 	w, b = params
 	return 1.0/(1.0 + torch.exp(-w*(X-b)))
 
-def test_vanila():
+def demo_vanila():
 	D_train, D_val = generate_task()
 	initial_params = torch.FloatTensor([0.0, 0.0])
 	new_params = vanila_train(D_train, initial_params)
@@ -89,7 +93,7 @@ def unnorm_log_posterior(params, D):
 	log_likelihood = n_samples*avgLL(params, D)
 	return log_likelihood #+ log_prior(params)
 
-def test_posterior_sampling():
+def demo_posterior_sampling():
 	# estimate posterior using samples 
 	D_train, D_val = generate_task()
 	# rejection sampling
@@ -108,7 +112,7 @@ def test_posterior_sampling():
 	plt.scatter(samples[:, 0], samples[:, 1])
 	plt.show()
 
-def test_posterior_grid():
+def demo_posterior_grid():
 	D_train, D_val = generate_task()
 	# evaluate unnormalized posterior
 	n_grid = 30
@@ -128,12 +132,8 @@ def test_posterior_grid():
 	plt.show()
 
 
-def test_maml():
-	train_tasks = [generate_task() for _ in range(10)]
-	val_tasks = [generate_task() for _ in range(10)]
 
-
-def test_loss_grid():
+def demo_loss_grid():
 	D_train, D_val = generate_task()
 	n_grid = 30
 	grid_size = 10.
@@ -151,7 +151,7 @@ def test_loss_grid():
 	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
 	plt.show()
 
-def test_ml_bayes_gt():
+def demo_ml_bayes_gt():
 	D_train, D_val, true_params = generate_task(return_params=True)
 	#initial_params = torch.FloatTensor([0.0, 0.0])
 	#new_params = vanila_train(D_train, initial_params)
@@ -178,4 +178,50 @@ def test_ml_bayes_gt():
 	plt.plot(ml_w, ml_b, 'bo')
 	plt.show()
 
-test_ml_bayes_gt()
+'''
+def maml_train(train_tasks):
+	params = torch.Tensor([0.0, 0.0])
+	params.requires_grad_(True)
+	optimizer = torch.optim.SGD([params], lr=0.1)
+	n_meta_iter = 5
+	for meta_iter in range(n_meta_iter):
+		meta_loss = torch.Tensor([0.0])
+		for task in train_tasks:
+			D_train, D_val = task
+			task_train_loss = -avgLL(params, D_train)
+			grad_task = 
+			task_param =
+			meta_loss = meta_loss + (-avgLL(params, D_train))
+		optimizer.zero_grad()
+		meta_loss.backward()
+		optimizer.step()
+	init_params = params.detach()
+	return init_params
+'''
+
+def vanila_train_autograd(D_train, old_params):
+	params = old_params.clone()
+	params.requires_grad_(True)
+	n_epochs = 500
+	for epoch in range(n_epochs):
+		negLL = -avgLL(params, D_train)
+		param_grad = grad(negLL, params, create_graph=True)[0]
+		params = params - 0.1*param_grad
+	params = params.detach()
+	return params
+
+def demo_vanila_autograd():
+	D_train, D_val = generate_task()
+	initial_params = torch.FloatTensor([0.0, 0.0])
+	new_params = vanila_train_autograd(D_train, initial_params)
+	print(new_params)
+
+def demo_maml():
+	N_tasks = 20
+	train_tasks = [generate_task() for _ in range(N_tasks)]
+	val_tasks = [generate_task() for _ in range(N_tasks)]
+	init_params = maml_train(train_tasks)
+	print(init_params)
+
+
+demo_vanila_autograd()
