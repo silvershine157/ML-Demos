@@ -3,21 +3,23 @@ import torch
 import matplotlib.pyplot as plt
 from torch.distributions import MultivariateNormal
 
-def generate_task():
+def generate_task(return_params=False):
 	# sample ground truth parameters from a distribution
 	# learning this distribution is the objective of meta learning
 	# recommended config for interesting posteriors: w = 1.0, b = 2.0, N = 5
 
-	w = np.random.normal(0.0, 2.0)
-	b = np.random.normal(0.0, 2.0)
+	w = np.random.normal(0.0, 4.0)
+	b = np.random.normal(0.0, 4.0)
 	# TODO: some interesting regularity to meta-learn (bimodal, sharp reject etc.)
 	
 	params = torch.FloatTensor([w, b])
-	N_train = 5
-	N_val = 5
-	D_train = generate_task_data(N_train, params)
-	D_val = generate_task_data(N_val, params)
-	return D_train, D_val
+	N = 10
+	D_train = generate_task_data(N, params)
+	D_val = generate_task_data(N, params)
+	if not return_params:
+		return D_train, D_val
+	else:
+		return D_train, D_val, params
 
 def generate_task_data(n_samples, params):
 	cnt_c0 = 0
@@ -64,6 +66,7 @@ def vanila_train(D_train, old_params):
 		optimizer.zero_grad()
 		negLL.backward()
 		optimizer.step()
+	params = params.detach()
 	return params
 
 def model(X, params):
@@ -77,7 +80,7 @@ def test_vanila():
 	print(new_params)
 
 def log_prior(params):
-	m = MultivariateNormal(torch.zeros(2), 16.0*torch.eye(2))
+	m = MultivariateNormal(torch.zeros(2), 25.0*torch.eye(2))
 	return m.log_prob(params)
 
 def unnorm_log_posterior(params, D):
@@ -115,7 +118,8 @@ def test_posterior_grid():
 	ulp_values = np.zeros((n_grid, n_grid))
 	for w_i, w in enumerate(w_grid):
 		for b_i, b in enumerate(b_grid):
-			ulp_values[w_i, b_i] = unnorm_log_posterior(torch.Tensor([w, b]), D_train)
+			params = torch.Tensor([w, b])
+			ulp_values[w_i, b_i] = unnorm_log_posterior(params, D_train)
 	up_values = np.exp(ulp_values) # correct up to multiplication constant
 
 	res_img = np.transpose(up_values)
@@ -123,9 +127,55 @@ def test_posterior_grid():
 	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
 	plt.show()
 
+
 def test_maml():
 	train_tasks = [generate_task() for _ in range(10)]
 	val_tasks = [generate_task() for _ in range(10)]
 
 
-test_posterior_grid()
+def test_loss_grid():
+	D_train, D_val = generate_task()
+	n_grid = 30
+	grid_size = 10.
+	w_grid = np.linspace(-grid_size, grid_size, n_grid)
+	b_grid = np.linspace(-grid_size, grid_size, n_grid)
+	nll_values = np.zeros((n_grid, n_grid))
+	for w_i, w in enumerate(w_grid):
+		for b_i, b in enumerate(b_grid):
+			params = torch.Tensor([w, b])
+			nll_values[w_i, b_i] = -avgLL(params, D_train)
+
+	res_img = np.log(nll_values)
+	res_img = np.transpose(res_img)
+	res_img = np.flip(res_img, axis=0)
+	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
+	plt.show()
+
+def test_ml_bayes_gt():
+	D_train, D_val, true_params = generate_task(return_params=True)
+	#initial_params = torch.FloatTensor([0.0, 0.0])
+	#new_params = vanila_train(D_train, initial_params)
+
+	n_grid = 30
+	grid_size = 10.
+	w_grid = np.linspace(-grid_size, grid_size, n_grid)
+	b_grid = np.linspace(-grid_size, grid_size, n_grid)
+	ulp_values = np.zeros((n_grid, n_grid))
+	for w_i, w in enumerate(w_grid):
+		for b_i, b in enumerate(b_grid):
+			params = torch.Tensor([w, b])
+			ulp_values[w_i, b_i] = unnorm_log_posterior(params, D_train)
+	up_values = np.exp(ulp_values) # correct up to multiplication constant
+
+	res_img = np.transpose(up_values)
+	res_img = np.flip(res_img, axis=0)
+	plt.imshow(res_img, interpolation='bicubic', extent=[-grid_size, grid_size, -grid_size, grid_size])
+	
+	true_w, true_b = true_params
+	ml_w, ml_b = vanila_train(D_train, true_params)
+
+	plt.plot(true_w, true_b, 'ro')
+	plt.plot(ml_w, ml_b, 'bo')
+	plt.show()
+
+test_ml_bayes_gt()
