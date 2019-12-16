@@ -19,14 +19,21 @@ def svgd(init_particles, D_train, n_steps):
 # gradient descent (diff'able w.r.t. init_param)
 def grad_desc(init_param, D_train, n_steps):
 	'''
-	init_param: [1, D_param]
+	init_param: [1, D_param], should require grad
 	D_train:
 		X_train: [B_data, D_data]
 		Y_train: [B_data, D_out]
 	n_steps: int
 	new_param: [1, D_param]
 	'''
-	new_param = init_param
+	param = init_param
+	lr = 0.1
+	for _ in range(n_steps):
+		train_loss = -avgLL(D_train, param) # [1]
+		task_grad = grad(train_loss, param)[0] # [1, D_param]
+		param = param - lr*task_grad
+		print(train_loss)
+	new_param = param
 	return new_param
 
 # parametrized model
@@ -74,10 +81,12 @@ def generate_task_data(B_data, param):
 	return D
 
 def generate_task(true_params=None):
-	w = np.random.normal(0.0, 2.0)
-	b = np.random.normal(0.0, 2.0)
+	#w = np.random.normal(0.0, 2.0)
+	#b = np.random.normal(0.0, 2.0)
+	w = 10.
+	b = 0.0
 	param = torch.FloatTensor([[w, b]]) # [1, 2]
-	N = 20
+	N = 100
 	D_train = generate_task_data(N, param)
 	D_val = generate_task_data(N, param)
 	if true_params:
@@ -100,7 +109,7 @@ def avgLL(D, param):
 	probs = torch.zeros_like(Y_pred)
 	probs[Y_ > 0.5] = Y_pred[Y_ > 0.5] # probability that Y=1
 	probs[Y_ < 0.5] = 1-Y_pred[Y_ < 0.5] # probability that Y=0
-	out = torch.sum(torch.log(probs + 1.0E-7), dim=1).squeeze(dim=1)
+	out = torch.mean(torch.log(probs + 1.0E-7), dim=1).squeeze(dim=1)
 	return out
 
 # log prior over parameters
@@ -125,13 +134,14 @@ def sample_param(B_param=1):
 	# randomized initial parameter
 	# out: [B_param, D_param]
 	D_param = 2
-	out = torch.randn(B_param, D_param)
-	return out
+	param = 0.1*torch.randn(B_param, D_param)
+	param.requires_grad_(True)
+	return param
 
 def demo_grad_desc():
 	D_train, D_val = generate_task()
 	init_param = sample_param()
-	learned_param = grad_desc(init_param, D_train, n_steps=10)
+	learned_param = grad_desc(init_param, D_train, n_steps=1000)
 	test_task(D_val, learned_param)
 
 def demo_maml():
@@ -167,7 +177,8 @@ def train_bmaml(D_meta):
 	return init_particles
 
 def test_task(D_val, param):
-	pass
+	LL = avgLL(D_val, param).item()
+	print('average LL: ', LL)
 
 def test_meta_svgd(D_meta, init_particles):
 	pass
@@ -176,4 +187,4 @@ def test_meta_grad_desc(D_meta, param):
 	pass
 
 
-test()
+demo_grad_desc()
