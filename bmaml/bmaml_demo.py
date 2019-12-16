@@ -72,6 +72,17 @@ def generate_task_data(B_data, param):
 	D = (X, Y)
 	return D
 
+def generate_task(true_params=None):
+	w = np.random.normal(0.0, 2.0)
+	b = np.random.normal(0.0, 2.0)
+	param = torch.FloatTensor([[w, b]]) # [1, 2]
+	N = 20
+	D_train = generate_task_data(N, param)
+	D_val = generate_task_data(N, param)
+	if true_params:
+		true_params[:] = param
+	return D_train, D_val
+
 # avg log likelihood
 def avg_log_p_D_given_param(D, param):
 	'''
@@ -102,9 +113,7 @@ def log_p_param_given_D_unnorm(D, param):
 	return None
 
 def test():
-	B_data = 10
-	param = torch.ones((1, 2))
-	generate_task_data(B_data, param)
+	generate_task()
 	pass
 
 def demo_1():
