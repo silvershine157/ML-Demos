@@ -32,7 +32,7 @@ def grad_desc(init_param, D_train, n_steps):
 		train_loss = -avgLL(D_train, param) # [1]
 		task_grad = grad(train_loss, param)[0] # [1, D_param]
 		param = param - lr*task_grad
-		print(train_loss)
+		#print(train_loss.item())
 	new_param = param
 	return new_param
 
@@ -83,10 +83,10 @@ def generate_task_data(B_data, param):
 def generate_task(true_params=None):
 	#w = np.random.normal(0.0, 2.0)
 	#b = np.random.normal(0.0, 2.0)
-	w = 10.
+	w = 5.
 	b = 0.0
 	param = torch.FloatTensor([[w, b]]) # [1, 2]
-	N = 100
+	N = 1000
 	D_train = generate_task_data(N, param)
 	D_val = generate_task_data(N, param)
 	if true_params:
@@ -141,7 +141,8 @@ def sample_param(B_param=1):
 def demo_grad_desc():
 	D_train, D_val = generate_task()
 	init_param = sample_param()
-	learned_param = grad_desc(init_param, D_train, n_steps=1000)
+	test_task(D_val, init_param)
+	learned_param = grad_desc(init_param, D_train, n_steps=100)
 	test_task(D_val, learned_param)
 
 def demo_maml():
@@ -177,7 +178,14 @@ def train_bmaml(D_meta):
 	return init_particles
 
 def test_task(D_val, param):
+	# param: [1, D_param]
 	LL = avgLL(D_val, param).item()
+	X, Y = D_val
+	Y_pred = model(X, param).squeeze(dim=0)
+	n_correct = torch.sum(Y[Y_pred > 0.5])+torch.sum(1-Y[Y_pred < 0.5])
+	n_total = X.size(0)
+	accuracy = n_correct.item()/n_total
+	print('accuracy: {:.02f}'.format(accuracy))
 	print('average LL: ', LL)
 
 def test_meta_svgd(D_meta, init_particles):
