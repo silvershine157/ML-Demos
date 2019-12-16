@@ -26,7 +26,8 @@ def grad_desc(init_param, D_train, n_steps):
 	n_steps: int
 	new_param: [1, D_param]
 	'''
-	return None
+	new_param = init_param
+	return new_param
 
 # parametrized model
 def model(X, param):
@@ -84,15 +85,23 @@ def generate_task(true_params=None):
 	return D_train, D_val
 
 # avg log likelihood
-def avg_log_p_D_given_param(D, param):
+def avgLL(D, param):
 	'''
 	D:
 		X: [B_data, D_data]
 		Y: [B_data, D_out]
 	param: [B_param, D_param]
-	out: [B_param]	
+	out: [B_param]
 	'''
-	return None
+	B_param = param.size(0)
+	X, Y = D
+	Y_pred = model(X, param) # [B_param, B_data, 1]
+	Y_ = Y.unsqueeze(dim=0).expand((B_param, -1, -1))
+	probs = torch.zeros_like(Y_pred)
+	probs[Y_ > 0.5] = Y_pred[Y_ > 0.5] # probability that Y=1
+	probs[Y_ < 0.5] = 1-Y_pred[Y_ < 0.5] # probability that Y=0
+	out = torch.sum(torch.log(probs + 1.0E-7), dim=1).squeeze(dim=1)
+	return out
 
 # log prior over parameters
 def log_p_param(param):
@@ -112,38 +121,59 @@ def log_p_param_given_D_unnorm(D, param):
 	'''
 	return None
 
-def test():
-	generate_task()
+def sample_param(B_param=1):
+	# randomized initial parameter
+	# out: [B_param, D_param]
+	D_param = 2
+	out = torch.randn(B_param, D_param)
+	return out
+
+def demo_grad_desc():
+	D_train, D_val = generate_task()
+	init_param = sample_param()
+	learned_param = grad_desc(init_param, D_train, n_steps=10)
+	test_task(D_val, learned_param)
+
+def demo_maml():
 	pass
 
-def demo_1():
-	# sample a task with some seed
-	# find ML solution using GD
-	# compute exact posterior
-	# plot [posterior + ML point + GT point] with [data + ML curve + GT curve]
+def demo_svgd():
 	pass
 
-def demo_2():
-	# sample meta-learning data with some seed
-	# find init points using MAML
-	# compare GT points and adaptation points
-	pass
-
-def demo_3():
-	# sample a task with some seed
-	# compute exact posterior
-	# apply SVGD
-	# plot exact posterior and SVGD samples
-	pass
-
-def demo_4():
+def demo_bfa():
 	# BFA
-	# sample meta-learning data with some seed
+	D_meta_train, D_meta_val = generate_meta_task()
+	init_particles = train_bfa(D_meta_train)
+	test_meta_svgd(D_meta_val, init_particles)
+
+def demo_bmaml():
+	# BMAML
+	D_meta_train, D_meta_val = generate_meta_task()
+	init_particles = train_bmaml(D_meta_train)
+	test_meta_svgd(D_meta_val, init_particles)
+
+def generate_meta_task():
+	N_tasks = 10
+	D_meta_train = [generate_task() for _ in range(N_tasks)]
+	D_meta_val = [generate_task() for _ in range(N_tasks)]
+	return D_meta_train, D_meta_val
+
+def train_bfa(D_meta):
+	init_particles = None
+	return init_particles	
+
+def train_bmaml(D_meta):
+	init_particles = None
+	return init_particles
+
+def test_task(D_val, param):
 	pass
 
-def demo_5():
-	# BMAML
-	# sample meta-learning data with some seed
+def test_meta_svgd(D_meta, init_particles):
 	pass
+
+def test_meta_grad_desc(D_meta, param):
+	pass
+
 
 test()
