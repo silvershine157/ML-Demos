@@ -5,6 +5,9 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
+import torch.optim as optim
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Encoder(nn.Module):
 	def __init__(self, latent_dim):
@@ -12,7 +15,7 @@ class Encoder(nn.Module):
 		self.latent_dim = latent_dim
 		self.layers = nn.Sequential(
 			nn.Linear(28*28, 200),
-			nn.ReLU(),
+			nn.Tanh(),
 			nn.Linear(200, latent_dim*2)
 		)
 	def forward(self, x):
@@ -29,7 +32,7 @@ class Decoder(nn.Module):
 		self.latent_dim = latent_dim
 		self.layers = nn.Sequential(
 			nn.Linear(latent_dim, 200),
-			nn.ReLU(),
+			nn.Tanh(),
 			nn.Linear(200, 28*28),
 			nn.Sigmoid()
 		)
@@ -60,24 +63,51 @@ def get_mnist_loaders(batch_size):
 #plt.show()
 
 def D_KL(mu, sigma):
-	pass
+	out = -torch.mean(1 + torch.log(sigma**2) - mu**2 - sigma**2)
+	return out
 
 def main():
-	latent_dim=10
-	batch_size=4
+
+	latent_dim=50
+	batch_size=32
+	lr = 0.001
 	train_loader, valid_loader, test_loader = get_mnist_loaders(batch_size)
-	enc = Encoder(latent_dim)
-	dec = Decoder(latent_dim)
-	for x, y in train_loader:
+	enc = Encoder(latent_dim).to(device)
+	dec = Decoder(latent_dim).to(device)
+	enc_optim = optim.Adam(enc.parameters(), lr=lr)
+	dec_optim = optim.Adam(dec.parameters(), lr=lr)
+
+	for epoch in range(10):
+		running_loss = 0.0
+		running_n = 0
+		for x, y in train_loader:
+			enc_optim.zero_grad()
+			dec_optim.zero_grad()
+			x = x.to(device)
+			B = x.size(0)
+			mu, sigma = enc(x)
+			noise = torch.randn(B, latent_dim).to(device)
+			z = mu + sigma * noise
+			x_r = dec(z)
+			LL_0 = torch.mean(torch.log(1-x_r[x < 0.5]))
+			LL_1 = torch.mean(torch.log(x_r[x > 0.5]))
+			LL = (LL_0+LL_1)/2
+			loss = -(LL - D_KL(mu, sigma))
+			loss.backward()
+			enc_optim.step()
+			dec_optim.step()
+			running_n += B
+			running_loss += B*loss.item()
+		print(running_loss/running_n)
+
+	enc.cpu()
+	dec.cpu()
+	for x, y in valid_loader:
+		plt.imshow(x[0, 0, :, :].numpy())
+		plt.show()	
 		mu, sigma = enc(x)
-		noise = torch.randn(batch_size, latent_dim)
-		z = mu + sigma * noise
-		x_r = dec(z)
-		LL_0 = torch.mean(1-torch.log(x_r[x < 0.5]))
-		LL_1 = torch.mean(torch.log(x_r[x > 0.5]))
-		LL = (LL_0+LL_1)/2
-		print(x_r.shape)
-		print(LL)
-		break
+		x_r = dec(mu).detach()
+		plt.imshow(x_r[0, 0, :, :].numpy())
+		plt.show()		
 
 main()
