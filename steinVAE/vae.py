@@ -43,7 +43,6 @@ class DecoderMLP(nn.Module):
 		x_r = out.view(B, 1, 28, 28)
 		return x_r
 
-
 def get_mnist_loaders(batch_size):
 	mnist_transform = transforms.Compose([
 	    transforms.ToTensor(), 
@@ -60,10 +59,6 @@ def get_mnist_loaders(batch_size):
 	test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 	return train_loader, valid_loader, test_loader
 
-#print(x.shape)
-#plt.imshow(x[0, 0, :, :].numpy())
-#plt.show()
-
 def D_KL(mu, sigma):
 	out = -torch.sum(1 + torch.log(sigma**2) - mu**2 - sigma**2)
 	return out
@@ -72,14 +67,14 @@ def main():
 
 	latent_dim=50
 	batch_size=100
-	lr = 0.01
+	lr = 0.001
 	train_loader, valid_loader, test_loader = get_mnist_loaders(batch_size)
 	enc = EncoderMLP(latent_dim).to(device)
 	dec = DecoderMLP(latent_dim).to(device)
-	enc_optim = optim.Adagrad(enc.parameters(), lr=lr)
-	dec_optim = optim.Adagrad(dec.parameters(), lr=lr)
+	enc_optim = optim.Adam(enc.parameters(), lr=lr)
+	dec_optim = optim.Adam(dec.parameters(), lr=lr)
 
-	for epoch in range(30):
+	for epoch in range(5):
 		running_loss = 0.0
 		running_n = 0
 		for x, y in train_loader:
