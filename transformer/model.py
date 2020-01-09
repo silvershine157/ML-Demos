@@ -15,7 +15,7 @@ class Encoder(nn.Module):
 		super(Encoder, self).__init__()
 		self.n_blocks = n_blocks
 		self.embedding = nn.Embedding(vsize_src, d_model)
-		block_list = [EncoderBlock() for _ in range(n_blocks)]
+		block_list = [EncoderBlock(d_model) for _ in range(n_blocks)]
 		self.enc_blocks = nn.ModuleList(block_list)
 
 	def forward(self, source):
@@ -37,7 +37,7 @@ class Decoder(nn.Module):
 		super(Decoder, self).__init__()
 		self.n_blocks = n_blocks
 		self.embedding = nn.Embedding(vsize_tar, d_model)
-		block_list = [DecoderBlock() for _ in range(n_blocks)]
+		block_list = [DecoderBlock(d_model) for _ in range(n_blocks)]
 		self.dec_blocks = nn.ModuleList(block_list)
 		self.out_layer = nn.Sequential(
 			nn.Linear(d_model, vsize_tar),
@@ -60,8 +60,13 @@ class Decoder(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-	def __init__(self):
+	def __init__(self, d_model, d_ff):
 		super(EncoderBlock, self).__init__()
+		self.feed_forward = nn.Sequential(
+			nn.Linear(d_model, d_ff),
+			nn.ReLU(),
+			nn.linear(d_ff, d_model)
+		)
 
 	def forward(self, b_in):
 		'''
@@ -75,8 +80,13 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-	def __init__(self):
+	def __init__(self, d_model):
 		super(DecoderBlock, self).__init__()
+		self.feed_forward = nn.Sequential(
+			nn.Linear(d_model, d_ff),
+			nn.ReLU(),
+			nn.linear(d_ff, d_model)
+		)
 
 	def forward(self, b_in):
 		'''
@@ -87,6 +97,21 @@ class DecoderBlock(nn.Module):
 		b_out = b_in
 		# TODO: specify decoder block
 		return b_out
+
+class MultiHeadAttn(nn.Module):
+	def __init__(self):
+		super(MultiHeadAttn, self).__init__()
+		
+
+def layer_norm(z):
+	'''
+	z: [B, L, Dm]
+	-----
+	out: [B, L, Dm]
+	'''
+	# TODO: implement layernorm
+	out = z
+	return out
 
 
 def positional_encoding(shape):
