@@ -12,6 +12,8 @@ Vt: target vocabulary size
 Dm: model dimension
 '''
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class Transformer(nn.Module):
 	def __init__(self, n_blocks, d_model, vsize_src, vsize_tar, d_ff):
 		super(Transformer, self).__init__()
@@ -215,8 +217,8 @@ def attention(Q, K, V, mask):
 
 def positional_encoding(shape):
 	B, L, D = shape
-	L_grid = torch.arange(L, dtype=torch.float).unsqueeze(dim=1).expand((-1, D)) # [L, D]
-	D_grid = torch.arange(D, dtype=torch.float).unsqueeze(dim=0).expand((L, -1)) # [L, D]
+	L_grid = torch.arange(L, dtype=torch.float, device=device).unsqueeze(dim=1).expand((-1, D)) # [L, D]
+	D_grid = torch.arange(D, dtype=torch.float, device=device).unsqueeze(dim=0).expand((L, -1)) # [L, D]
 	i_pairs = D_grid//2
 	i_alt = D_grid-2*i_pairs
 	phase = L_grid/(10000**(i_pairs/D)) + (math.pi/2)*i_alt
@@ -239,7 +241,7 @@ def expand_mask(mask2d, Lq=None, autoreg=False):
 		mask3d = torch.unsqueeze(mask2d, dim=1).expand((-1, L, -1))
 		if autoreg:
 			# decoder self attention
-			automask = 1-torch.tril(torch.ones((L, L), dtype=torch.uint8)) # [Lq, Lv]
+			automask = 1-torch.tril(torch.ones((L, L), dtype=torch.uint8, device=device)) # [Lq, Lv]
 			automask = automask.to(torch.bool)
 			mask3d = automask + mask3d
 		else:

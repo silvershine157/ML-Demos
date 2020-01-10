@@ -7,9 +7,17 @@ from utils import seq2sen
 from model import Transformer
 
 import torch
+import torch.optim as optim
 
+# TODO: use these information.
+sos_idx = 0
+eos_idx = 1
+pad_idx = 2
+max_length = 50
 
-def make_tensor(idx_list, pad_idx):
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def make_tensor(idx_list):
     '''
     idx_list: list of lists
     ---
@@ -20,6 +28,32 @@ def make_tensor(idx_list, pad_idx):
     pad_mask = (idx_tnsr == pad_idx)
     return idx_tnsr, pad_mask
 
+
+def train_epoch(net, loader, optimizer):
+    running_loss = 0.0
+    running_n = 0
+    iter_cnt = 0
+    for src_batch, tgt_batch in loader:
+        B = len(src_batch)
+        optimizer.zero_grad()
+        source, src_mask = make_tensor(src_batch)
+        target, tar_mask = make_tensor(tgt_batch)
+        source = source.to(device)
+        src_mask = src_mask.to(device)
+        target = target.to(device)
+        tar_mask = tar_mask.to(device)
+        loss = net.loss(source, src_mask, target, tar_mask)
+        loss.backward()
+        optimizer.step()
+        running_loss += B*loss.item()
+        running_n += B
+        iter_cnt += 1
+        if (iter_cnt % 10 == 0):
+            print("iter: ", iter_cnt)
+    avg_loss = running_loss/running_n
+    return avg_loss
+
+
 def main(args):
     src, tgt = load_data(args.path)
 
@@ -28,36 +62,25 @@ def main(args):
     tgt_vocab = Vocab(init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>')
     tgt_vocab.load(os.path.join(args.path, 'vocab.de'))
 
-    # TODO: use these information.
-    sos_idx = 0
-    eos_idx = 1
-    pad_idx = 2
-    max_length = 50
-
-    # TODO: use these values to construct embedding layers
-    src_vocab_size = len(src_vocab)
-    tgt_vocab_size = len(tgt_vocab)
-
-
-    # TODO: build model
     n_blocks = 6
     d_model = 512
-    vsize_src = src_vocab_size
-    vsize_tar = tgt_vocab_size
+    vsize_src = len(src_vocab)
+    vsize_tar = len(tgt_vocab)
     d_ff = 2048
+    net = Transformer(n_blocks, d_model, vsize_src, vsize_tar, d_ff)
 
     if not args.test:
+
         train_loader = get_loader(src['train'], tgt['train'], src_vocab, tgt_vocab, batch_size=args.batch_size, shuffle=True)
         valid_loader = get_loader(src['valid'], tgt['valid'], src_vocab, tgt_vocab, batch_size=args.batch_size)
 
-        # TODO: train
+        net.train()
+        net.to(device)
+        optimizer = optim.Adam(net.parameters(), lr=0.001)
+
         for epoch in range(args.epochs):
-            for src_batch, tgt_batch in train_loader:
-                source, src_mask = make_tensor(src_batch, pad_idx)
-
-                raise NotImplementedError
-                pass
-
+            avg_loss = train_epoch(net, train_loader, optimizer)
+            print(avg_loss)
             # TODO: validation
             for src_batch, tgt_batch in valid_loader:
                 pass
