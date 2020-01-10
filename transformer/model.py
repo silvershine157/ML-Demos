@@ -173,8 +173,14 @@ def attention(Q, K, V, mask):
 
 
 def positional_encoding(shape):
-	# TODO: calculate positional encoding
-	pos_enc = torch.zeros(shape)
+	B, L, D = shape
+	L_grid = torch.arange(L, dtype=torch.float).unsqueeze(dim=1).expand((-1, D)) # [L, D]
+	D_grid = torch.arange(D, dtype=torch.float).unsqueeze(dim=0).expand((L, -1)) # [L, D]
+	i_pairs = D_grid//2
+	i_alt = D_grid-2*i_pairs
+	phase = L_grid/(10000**(i_pairs/D)) + (math.pi/2)*i_alt
+	pos_enc = torch.sin(phase) # [L, D]
+	pos_enc = pos_enc.unsqueeze(dim=0).expand((B, -1, -1)) # [B, L, D]
 	return pos_enc
 
 
@@ -198,6 +204,7 @@ def test():
 	for b in range(batch_size):
 		src_mask[b, np.random.randint(len_src//2, len_src):] = 1
 		tar_mask[b, np.random.randint(len_tar//2, len_tar):] = 1
+
 	print(source.shape)
 	enc_out = enc(source, src_mask)
 	out_probs = dec(enc_out, target, src_mask, tar_mask)
@@ -246,6 +253,5 @@ def expand_mask(mask2d, Lq=None, autoreg=False):
 		# cross attention
 		mask3d = torch.unsqueeze(mask2d, dim=1).expand((-1, Lq, -1))
 	return mask3d
-
 
 test()
