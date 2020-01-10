@@ -11,11 +11,11 @@ Dm: model dimension
 '''
 
 class Encoder(nn.Module):
-	def __init__(self, n_blocks, d_model, vsize_src):
+	def __init__(self, n_blocks, d_model, vsize_src, d_ff):
 		super(Encoder, self).__init__()
 		self.n_blocks = n_blocks
 		self.embedding = nn.Embedding(vsize_src, d_model)
-		block_list = [EncoderBlock(d_model) for _ in range(n_blocks)]
+		block_list = [EncoderBlock(d_model, d_ff) for _ in range(n_blocks)]
 		self.enc_blocks = nn.ModuleList(block_list)
 
 	def forward(self, source):
@@ -33,11 +33,11 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-	def __init__(self, n_blocks, d_model, vsize_tar):
+	def __init__(self, n_blocks, d_model, vsize_tar, d_ff):
 		super(Decoder, self).__init__()
 		self.n_blocks = n_blocks
 		self.embedding = nn.Embedding(vsize_tar, d_model)
-		block_list = [DecoderBlock(d_model) for _ in range(n_blocks)]
+		block_list = [DecoderBlock(d_model, d_ff) for _ in range(n_blocks)]
 		self.dec_blocks = nn.ModuleList(block_list)
 		self.out_layer = nn.Sequential(
 			nn.Linear(d_model, vsize_tar),
@@ -65,8 +65,10 @@ class EncoderBlock(nn.Module):
 		self.feed_forward = nn.Sequential(
 			nn.Linear(d_model, d_ff),
 			nn.ReLU(),
-			nn.linear(d_ff, d_model)
+			nn.Linear(d_ff, d_model)
 		)
+		self.layernorm1 = nn.LayerNorm(d_model)
+		self.layernorm2 = nn.LayerNorm(d_model)
 
 	def forward(self, b_in):
 		'''
@@ -74,19 +76,22 @@ class EncoderBlock(nn.Module):
 		-----
 		b_out: [B, Ls, Dm]
 		'''
-		b_out = b_in
+		b_out = self.layernorm1(b_in)
 		# TODO: specify encoder block
 		return b_out
 
 
 class DecoderBlock(nn.Module):
-	def __init__(self, d_model):
+	def __init__(self, d_model, d_ff):
 		super(DecoderBlock, self).__init__()
 		self.feed_forward = nn.Sequential(
 			nn.Linear(d_model, d_ff),
 			nn.ReLU(),
-			nn.linear(d_ff, d_model)
+			nn.Linear(d_ff, d_model)
 		)
+		self.layernorm1 = nn.LayerNorm(d_model)
+		self.layernorm2 = nn.LayerNorm(d_model)
+		self.layernorm3 = nn.LayerNorm(d_model)
 
 	def forward(self, b_in):
 		'''
@@ -101,17 +106,6 @@ class DecoderBlock(nn.Module):
 class MultiHeadAttn(nn.Module):
 	def __init__(self):
 		super(MultiHeadAttn, self).__init__()
-		
-
-def layer_norm(z):
-	'''
-	z: [B, L, Dm]
-	-----
-	out: [B, L, Dm]
-	'''
-	# TODO: implement layernorm
-	out = z
-	return out
 
 
 def positional_encoding(shape):
@@ -123,11 +117,12 @@ def positional_encoding(shape):
 def test():
 
 	n_blocks = 6
-	d_model = 64
+	d_model = 512
 	vsize_src = 100
 	vsize_tar = 128
-	enc = Encoder(n_blocks, d_model, vsize_src)
-	dec = Decoder(n_blocks, d_model, vsize_tar)
+	d_ff = 2048
+	enc = Encoder(n_blocks, d_model, vsize_src, d_ff)
+	dec = Decoder(n_blocks, d_model, vsize_tar, d_ff)
 
 	batch_size=3
 	len_src=10
@@ -135,8 +130,9 @@ def test():
 	source = torch.zeros([batch_size, len_src], dtype=torch.long)
 	target = torch.zeros([batch_size, len_tar], dtype=torch.long)
 	
+	print(source.shape)
 	enc_out = enc(source)
 	out_probs = dec(enc_out, target)
-
+	print(out_probs.shape)
 
 test()
