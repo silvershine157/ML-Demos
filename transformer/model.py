@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 
 '''
 B: batch size
@@ -125,6 +126,7 @@ class MultiHeadAttn(nn.Module):
 		self.Wks = nn.ModuleList([nn.Linear(d_model, d_k, bias=False) for _ in range(n_heads)])
 		self.Wvs = nn.ModuleList([nn.Linear(d_model, d_v, bias=False) for _ in range(n_heads)])
 		self.Wo = nn.Linear(n_heads*d_v, d_model, bias=False)
+		# TODO: provide mask
 
 	def forward(self, Q, K, V):
 		'''
@@ -151,7 +153,9 @@ def attention(Q, K, V):
 	---
 	out: [B, Lq, Dv]
 	'''
-	out = Q
+	scores = torch.einsum('bqd,bvd->bqv', Q, K) # [B, Lq, Lv]
+	weights = nn.functional.softmax(scores/math.sqrt(K.size(2)), dim=2)
+	out = torch.einsum('bqv,bvd->bqd', weights, V)
 	return out
 
 
