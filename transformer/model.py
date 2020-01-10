@@ -58,10 +58,12 @@ class Decoder(nn.Module):
 		---
 		out_probs: [B, Lt, Vt]
 		'''
+		self_mask = expand_mask(tar_mask, Lq=None, autoreg=True)
+		cross_mask = expand_mask(src_mask, Lq=tar_mask.size(1), autoreg=False)
 		emb = self.embedding(target)
 		emb = emb + positional_encoding(emb.shape)
 		for n in range(self.n_blocks):
-			emb = self.dec_blocks[n](emb, enc_out)
+			emb = self.dec_blocks[n](emb, enc_out, self_mask, cross_mask)
 		out_probs = self.out_layer(emb)
 		return out_probs
 
@@ -187,7 +189,7 @@ def test():
 	dec = Decoder(n_blocks, d_model, vsize_tar, d_ff)
 
 	batch_size=4
-	len_src=5
+	len_src=10
 	len_tar=8
 	source = torch.zeros([batch_size, len_src], dtype=torch.long)
 	target = torch.zeros([batch_size, len_tar], dtype=torch.long)
@@ -196,8 +198,6 @@ def test():
 	for b in range(batch_size):
 		src_mask[b, np.random.randint(len_src//2, len_src):] = 1
 		tar_mask[b, np.random.randint(len_tar//2, len_tar):] = 1
-	
-
 	print(source.shape)
 	enc_out = enc(source, src_mask)
 	out_probs = dec(enc_out, target, src_mask, tar_mask)
@@ -219,7 +219,7 @@ def test2():
 	enc_self = expand_mask(src_mask, Lq=None, autoreg=False)
 	dec_self = expand_mask(tar_mask, Lq=None, autoreg=True)
 	dec_cross = expand_mask(src_mask, Lq=len_tar, autoreg=False)
-	print(dec_cross)
+	#print(dec_cross)
 
 
 def expand_mask(mask2d, Lq=None, autoreg=False):
@@ -236,8 +236,9 @@ def expand_mask(mask2d, Lq=None, autoreg=False):
 		mask3d = torch.unsqueeze(mask2d, dim=1).expand((-1, L, -1))
 		if autoreg:
 			# decoder self attention
-			automask = 1-torch.tril(torch.ones((L, L), dtype=torch.bool)) # [Lq, Lv]
-			mask3d = torch.clamp(mask3d+automask.unsqueeze(dim=0), 0, 1) # broadcasting
+			automask = 1-torch.tril(torch.ones((L, L), dtype=torch.uint8)) # [Lq, Lv]
+			automask = automask.to(torch.bool)
+			mask3d = automask + mask3d
 		else:
 			# encoder self attention
 			pass
