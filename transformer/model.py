@@ -54,7 +54,7 @@ class Decoder(nn.Module):
 		emb = self.embedding(target)
 		emb = emb + positional_encoding(emb.shape)
 		for n in range(self.n_blocks):
-			emb = self.dec_blocks[n](emb)
+			emb = self.dec_blocks[n](emb, enc_out)
 		out_probs = self.out_layer(emb)
 		return out_probs
 
@@ -69,7 +69,7 @@ class EncoderBlock(nn.Module):
 		)
 		self.layernorm1 = nn.LayerNorm(d_model)
 		self.layernorm2 = nn.LayerNorm(d_model)
-		self.multihead = MultiHeadAttn()
+		self.multihead = MultiHeadAttn(d_model)
 
 	def forward(self, b_in):
 		'''
@@ -80,7 +80,7 @@ class EncoderBlock(nn.Module):
 		z1 = self.multihead(b_in, b_in, b_in)
 		a1 = self.layernorm1(z1 + b_in)
 		z2 = self.feedforward(a1)
-		b_out = self.layernorm(z2 + a1)
+		b_out = self.layernorm2(z2 + a1)
 		return b_out
 
 
@@ -95,8 +95,8 @@ class DecoderBlock(nn.Module):
 		self.layernorm1 = nn.LayerNorm(d_model)
 		self.layernorm2 = nn.LayerNorm(d_model)
 		self.layernorm3 = nn.LayerNorm(d_model)
-		self.masked_multihead = MultiHeadAttn() # TODO: provide option
-		self.cross_multihead = MultiHeadAttn()
+		self.masked_multihead = MultiHeadAttn(d_model) # TODO: provide option
+		self.cross_multihead = MultiHeadAttn(d_model)
 
 	def forward(self, b_in, enc_out):
 		'''
@@ -115,8 +115,16 @@ class DecoderBlock(nn.Module):
 
 
 class MultiHeadAttn(nn.Module):
-	def __init__(self):
+	def __init__(self, d_model):
 		super(MultiHeadAttn, self).__init__()
+		n_heads = 8
+		self.n_heads = n_heads
+		d_k = d_model//n_heads
+		d_v = d_k
+		self.Wqs = nn.ModuleList([nn.Linear(d_model, d_k, bias=False) for _ in range(n_heads)])
+		self.Wks = nn.ModuleList([nn.Linear(d_model, d_k, bias=False) for _ in range(n_heads)])
+		self.Wvs = nn.ModuleList([nn.Linear(d_model, d_v, bias=False) for _ in range(n_heads)])
+		self.Wo = nn.Linear(n_heads*d_v, d_model, bias=False)
 
 	def forward(self, Q, K, V):
 		'''
@@ -126,22 +134,25 @@ class MultiHeadAttn(nn.Module):
 		---
 		out: [B, Lq, Dm]
 		'''
+		heads = []
+		for i in range(self.n_heads):
+			head_i = attention(self.Wqs[i](Q), self.Wks[i](K), self.Wvs[i](V)) 
+			heads.append(head_i) # [B, Lq, d_v] each
+		heads_concat = torch.cat(heads, dim=2) # [B, Lq, d_v*h]
+		out = self.Wo(heads_concat) # [B, Lq, Dm]
 		return out
 
 
-class Attn(nn.Module):
-	def __init__(self):
-		super(Attn, self).__init__()
-
-	def forward(self, Q, K, V):
-		'''
-		Q: [B, Lq, Dq]
-		K: [B, Lv, Dq]
-		V: [B, Lv, Dv]
-		---
-		out: [B, Lq, Dv]
-		'''
-		return out
+def attention(Q, K, V):
+	'''
+	Q: [B, Lq, Dq]
+	K: [B, Lv, Dq]
+	V: [B, Lv, Dv]
+	---
+	out: [B, Lq, Dv]
+	'''
+	out = Q
+	return out
 
 
 def positional_encoding(shape):
