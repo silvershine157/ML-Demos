@@ -21,7 +21,7 @@ class Encoder(nn.Module):
 	def forward(self, source):
 		'''
 		source: [B, Ls] (int from range(Vs))
-		-----
+		---
 		enc_out: [B, Ls, Dm]
 		'''
 		emb = self.embedding(source) # [B, Ls, Dm]
@@ -48,7 +48,7 @@ class Decoder(nn.Module):
 		'''
 		enc_out: [B, Ls, Dm]
 		target: [B, Lt] (int from range(Vt))
-		-----
+		---
 		out_probs: [B, Lt, Vt]
 		'''
 		emb = self.embedding(target)
@@ -62,29 +62,32 @@ class Decoder(nn.Module):
 class EncoderBlock(nn.Module):
 	def __init__(self, d_model, d_ff):
 		super(EncoderBlock, self).__init__()
-		self.feed_forward = nn.Sequential(
+		self.feedforward = nn.Sequential(
 			nn.Linear(d_model, d_ff),
 			nn.ReLU(),
 			nn.Linear(d_ff, d_model)
 		)
 		self.layernorm1 = nn.LayerNorm(d_model)
 		self.layernorm2 = nn.LayerNorm(d_model)
+		self.multihead = MultiHeadAttn()
 
 	def forward(self, b_in):
 		'''
 		b_in: [B, Ls, Dm]
-		-----
+		---
 		b_out: [B, Ls, Dm]
 		'''
-		b_out = self.layernorm1(b_in)
-		# TODO: specify encoder block
+		z1 = self.multihead(b_in, b_in, b_in)
+		a1 = self.layernorm1(z1 + b_in)
+		z2 = self.feedforward(a1)
+		b_out = self.layernorm(z2 + a1)
 		return b_out
 
 
 class DecoderBlock(nn.Module):
 	def __init__(self, d_model, d_ff):
 		super(DecoderBlock, self).__init__()
-		self.feed_forward = nn.Sequential(
+		self.feedforward = nn.Sequential(
 			nn.Linear(d_model, d_ff),
 			nn.ReLU(),
 			nn.Linear(d_ff, d_model)
@@ -92,20 +95,53 @@ class DecoderBlock(nn.Module):
 		self.layernorm1 = nn.LayerNorm(d_model)
 		self.layernorm2 = nn.LayerNorm(d_model)
 		self.layernorm3 = nn.LayerNorm(d_model)
+		self.masked_multihead = MultiHeadAttn() # TODO: provide option
+		self.cross_multihead = MultiHeadAttn()
 
-	def forward(self, b_in):
+	def forward(self, b_in, enc_out):
 		'''
 		b_in: [B, Ls, Dm]
-		-----
+		---
 		b_out: [B, Ls, Dm]
 		'''
 		b_out = b_in
-		# TODO: specify decoder block
+		z1 = self.masked_multihead(b_in, b_in, b_in)
+		a1 = self.layernorm1(z1 + b_in)
+		z2 = self.cross_multihead(a1, enc_out, enc_out)
+		a2 = self.layernorm2(z2 + a1)
+		z3 = self.feedforward(a2)
+		b_out = self.layernorm3(z3 + a2)
 		return b_out
+
 
 class MultiHeadAttn(nn.Module):
 	def __init__(self):
 		super(MultiHeadAttn, self).__init__()
+
+	def forward(self, Q, K, V):
+		'''
+		Q: [B, Lq, Dm]
+		K: [B, Lv, Dm]
+		V: [B, Lv, Dm]
+		---
+		out: [B, Lq, Dm]
+		'''
+		return out
+
+
+class Attn(nn.Module):
+	def __init__(self):
+		super(Attn, self).__init__()
+
+	def forward(self, Q, K, V):
+		'''
+		Q: [B, Lq, Dq]
+		K: [B, Lv, Dq]
+		V: [B, Lv, Dv]
+		---
+		out: [B, Lq, Dv]
+		'''
+		return out
 
 
 def positional_encoding(shape):
