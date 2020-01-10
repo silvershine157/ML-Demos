@@ -4,6 +4,21 @@ import argparse
 from dataset.dataloader import load_data, get_loader
 from dataset.field import Vocab
 from utils import seq2sen
+from model import Transformer
+
+import torch
+
+
+def make_tensor(idx_list, pad_idx):
+    '''
+    idx_list: list of lists
+    ---
+    idx_tnsr: [B, L]
+    pad_mask: [B, L]
+    '''
+    idx_tnsr = torch.LongTensor(idx_list)
+    pad_mask = (idx_tnsr == pad_idx)
+    return idx_tnsr, pad_mask
 
 def main(args):
     src, tgt = load_data(args.path)
@@ -23,6 +38,14 @@ def main(args):
     src_vocab_size = len(src_vocab)
     tgt_vocab_size = len(tgt_vocab)
 
+
+    # TODO: build model
+    n_blocks = 6
+    d_model = 512
+    vsize_src = src_vocab_size
+    vsize_tar = tgt_vocab_size
+    d_ff = 2048
+
     if not args.test:
         train_loader = get_loader(src['train'], tgt['train'], src_vocab, tgt_vocab, batch_size=args.batch_size, shuffle=True)
         valid_loader = get_loader(src['valid'], tgt['valid'], src_vocab, tgt_vocab, batch_size=args.batch_size)
@@ -30,8 +53,9 @@ def main(args):
         # TODO: train
         for epoch in range(args.epochs):
             for src_batch, tgt_batch in train_loader:
-                print(src_batch)
-                break
+                source, src_mask = make_tensor(src_batch, pad_idx)
+
+                raise NotImplementedError
                 pass
 
             # TODO: validation
@@ -65,7 +89,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--path',
         type=str,
-        default='multi30k')
+        default='data/multi30k')
 
     parser.add_argument(
         '--epochs',

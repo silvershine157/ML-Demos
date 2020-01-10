@@ -12,6 +12,47 @@ Vt: target vocabulary size
 Dm: model dimension
 '''
 
+class Transformer(nn.Module):
+	def __init__(self, n_blocks, d_model, vsize_src, vsize_tar, d_ff):
+		super(Transformer, self).__init__()
+		self.enc = Encoder(n_blocks, d_model, vsize_src, d_ff)
+		self.dec = Decoder(n_blocks, d_model, vsize_tar, d_ff)
+
+	def loss(self, source, src_mask, target, tar_mask):
+		'''
+		source: [B, Ls] (int from range(Vs))
+		src_mask: [B, Ls]
+		target: [B, Lt] (int from range(Vt))
+		tar_mask: [B, Lt]
+		---
+		loss: float
+		'''
+		enc_out = self.enc(source, src_mask)
+		out_probs = self.dec(enc_out, target, src_mask, tar_mask)
+		loss = maskedNLL(out_probs, target, tar_mask)
+		return loss
+
+	def decode(self, source, src_mask):
+		'''
+		source: [B, Ls] (int from range(Vs))
+		src_mask: [B, Ls]
+		---
+		res: [B, Lt] (int from range(Vs))
+		'''
+		pass
+
+def maskedNLL(out_probs, target, tar_mask):
+	'''
+	out_probs: [B, Lt, Vt]
+	target: [B, Lt] (int from range(Vt))
+	tar_mask: [B, Lt]
+	---
+	nll: float
+	'''
+	tar_probs = torch.gather(out_probs, dim=2, index=target.unsqueeze(dim=2)).squeeze(dim=2)
+	log_probs = torch.log(tar_probs + 1.0E-7)
+	nll = -torch.mean(log_probs[tar_mask]) # TODO: proper normalization?
+	return nll
 
 class Encoder(nn.Module):
 	def __init__(self, n_blocks, d_model, vsize_src, d_ff):
@@ -184,51 +225,6 @@ def positional_encoding(shape):
 	return pos_enc
 
 
-def test():
-
-	n_blocks = 6
-	d_model = 512
-	vsize_src = 100
-	vsize_tar = 128
-	d_ff = 2048
-	enc = Encoder(n_blocks, d_model, vsize_src, d_ff)
-	dec = Decoder(n_blocks, d_model, vsize_tar, d_ff)
-
-	batch_size=4
-	len_src=10
-	len_tar=8
-	source = torch.zeros([batch_size, len_src], dtype=torch.long)
-	target = torch.zeros([batch_size, len_tar], dtype=torch.long)
-	src_mask = torch.zeros([batch_size, len_src], dtype=torch.bool)
-	tar_mask = torch.zeros([batch_size, len_tar], dtype=torch.bool)
-	for b in range(batch_size):
-		src_mask[b, np.random.randint(len_src//2, len_src):] = 1
-		tar_mask[b, np.random.randint(len_tar//2, len_tar):] = 1
-
-	print(source.shape)
-	enc_out = enc(source, src_mask)
-	out_probs = dec(enc_out, target, src_mask, tar_mask)
-	print(out_probs.shape)
-
-
-def test2():
-	# masking test
-	batch_size=4
-	len_src=10
-	len_tar=8
-	source = torch.zeros([batch_size, len_src], dtype=torch.long)
-	target = torch.zeros([batch_size, len_tar], dtype=torch.long)
-	src_mask = torch.zeros([batch_size, len_src], dtype=torch.bool)
-	tar_mask = torch.zeros([batch_size, len_tar], dtype=torch.bool)
-	for b in range(batch_size):
-		src_mask[b, np.random.randint(len_src//2, len_src):] = 1
-		tar_mask[b, np.random.randint(len_tar//2, len_tar):] = 1
-	enc_self = expand_mask(src_mask, Lq=None, autoreg=False)
-	dec_self = expand_mask(tar_mask, Lq=None, autoreg=True)
-	dec_cross = expand_mask(src_mask, Lq=len_tar, autoreg=False)
-	#print(dec_cross)
-
-
 def expand_mask(mask2d, Lq=None, autoreg=False):
 	'''
 	mask2d: [B, Lv]
@@ -254,4 +250,3 @@ def expand_mask(mask2d, Lq=None, autoreg=False):
 		mask3d = torch.unsqueeze(mask2d, dim=1).expand((-1, Lq, -1))
 	return mask3d
 
-test()
