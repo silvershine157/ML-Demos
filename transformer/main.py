@@ -94,12 +94,13 @@ def main(args):
         test_loader = get_loader(src['test'], tgt['test'], src_vocab, tgt_vocab, batch_size=args.batch_size)
 
         pred = []
+        iter_cnt = 0
         for src_batch, tgt_batch in test_loader:
-            # TODO: predict pred_batch from src_batch with your model.
-            #pred_batch = tgt_batch
             source, src_mask = make_tensor(src_batch)
+            source = source.to(device)
+            src_mask = src_mask.to(device)
             res = net.decode(source, src_mask)
-            # TODO: make list of lists
+            pred_batch = res.tolist()
             # every sentences in pred_batch should start with <sos> token (index: 0) and end with <eos> token (index: 1).
             # every <pad> token (index: 2) should be located after <eos> token (index: 1).
             # example of pred_batch:
@@ -107,6 +108,8 @@ def main(args):
             #  [0, 4, 9, 1, 2],
             #  [0, 6, 1, 2, 2]]
             pred += seq2sen(pred_batch, tgt_vocab)
+            iter_cnt += 1
+            print(pred_batch)
 
         with open('data/results/pred.txt', 'w') as f:
             for line in pred:

@@ -47,7 +47,7 @@ class Transformer(nn.Module):
 		interm = next_token
 		next_mask = torch.full(interm.shape, False, device=device, dtype=torch.bool)
 		interm_mask = next_mask
-		for _ in range(max_length):
+		for _ in range(8):
 			out_probs = self.dec(enc_out, interm, src_mask, interm_mask) # [B, Lt, Vt]
 			next_probs = out_probs[:, -1, :] # [B, Vt]
 			prev_token = next_token
@@ -58,7 +58,8 @@ class Transformer(nn.Module):
 			if torch.prod(next_mask).item():
 				break # all terminated
 		interm[interm_mask] = pad_idx
-		res = interm[:, :-1]
+		res = interm[:, :-1] # remove final pad
+		res[:, -1] = eos_idx # force EOS
 		return res
 
 def maskedNLL(out_probs, target, tar_mask):
@@ -71,7 +72,7 @@ def maskedNLL(out_probs, target, tar_mask):
 	'''
 	tar_probs = torch.gather(out_probs, dim=2, index=target.unsqueeze(dim=2)).squeeze(dim=2)
 	log_probs = torch.log(tar_probs + 1.0E-7)
-	nll = -torch.mean(log_probs[tar_mask]) # TODO: proper normalization?
+	nll = -torch.mean(log_probs[~tar_mask]) # TODO: proper normalization?
 	return nll
 
 class Encoder(nn.Module):

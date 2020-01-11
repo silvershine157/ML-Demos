@@ -65,6 +65,8 @@ def test3():
 	src_mask = src_mask.to(device)
 	net.to(device)
 
-	net.decode(source, src_mask)
+	res = net.decode(source, src_mask)
+	pred_batch = res.tolist()
+	print(pred_batch)
 
 test3()
