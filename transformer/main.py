@@ -29,13 +29,14 @@ def make_tensor(idx_list):
     return idx_tnsr, pad_mask
 
 
-def train_epoch(net, loader, optimizer):
+def run_epoch(net, loader, optimizer):
     running_loss = 0.0
     running_n = 0
     iter_cnt = 0
     for src_batch, tgt_batch in loader:
         B = len(src_batch)
-        optimizer.zero_grad()
+        if optimizer:
+            optimizer.zero_grad()
         source, src_mask = make_tensor(src_batch)
         target, tar_mask = make_tensor(tgt_batch)
         source = source.to(device)
@@ -43,12 +44,13 @@ def train_epoch(net, loader, optimizer):
         target = target.to(device)
         tar_mask = tar_mask.to(device)
         loss = net.loss(source, src_mask, target, tar_mask)
-        loss.backward()
-        optimizer.step()
+        if optimizer:
+            loss.backward()
+            optimizer.step()
         running_loss += B*loss.item()
         running_n += B
         iter_cnt += 1
-        if (iter_cnt % 10 == 0):
+        if (iter_cnt % 50 == 0):
             print("iter: ", iter_cnt)
     avg_loss = running_loss/running_n
     return avg_loss
@@ -78,14 +80,20 @@ def main(args):
         net.to(device)
         optimizer = optim.Adam(net.parameters(), lr=0.001)
 
+        best_valid_loss = 10.0
         for epoch in range(args.epochs):
-            avg_loss = train_epoch(net, train_loader, optimizer)
-            print(avg_loss)
-            # TODO: validation
-            for src_batch, tgt_batch in valid_loader:
-                pass
+            print("Epoch {0}".format(epoch))
+            train_loss = run_epoch(net, train_loader, optimizer)
+            print("train loss: {0}".format(train_loss))
+            valid_loss = run_epoch(net, valid_loader, None)
+            print("valid loss: {0}".format(valid_loss))
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                torch.save(net, 'data/ckpt/best_model')
     else:
         # test
+        net = torch.load('data/ckpt/best_model')
+
         test_loader = get_loader(src['test'], tgt['test'], src_vocab, tgt_vocab, batch_size=args.batch_size)
 
         pred = []
@@ -101,11 +109,11 @@ def main(args):
             #  [0, 6, 1, 2, 2]]
             pred += seq2sen(pred_batch, tgt_vocab)
 
-        with open('results/pred.txt', 'w') as f:
+        with open('data/results/pred.txt', 'w') as f:
             for line in pred:
                 f.write('{}\n'.format(line))
 
-        os.system('bash scripts/bleu.sh results/pred.txt multi30k/test.de.atok')
+        os.system('bash scripts/bleu.sh data/results/pred.txt data/multi30k/test.de.atok')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Transformer')
