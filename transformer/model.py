@@ -47,7 +47,7 @@ class Transformer(nn.Module):
 		interm = next_token
 		next_mask = torch.full(interm.shape, False, device=device, dtype=torch.bool)
 		interm_mask = next_mask
-		for _ in range(8):
+		for _ in range(max_length):
 			out_probs = self.dec(enc_out, interm, src_mask, interm_mask) # [B, Lt, Vt]
 			next_probs = out_probs[:, -1, :] # [B, Vt]
 			prev_token = next_token
