@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 import numpy as np
+from const import *
 
 '''
 B: batch size
@@ -11,8 +12,6 @@ Vs: source vocabulary size
 Vt: target vocabulary size
 Dm: model dimension
 '''
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Transformer(nn.Module):
 	def __init__(self, n_blocks, d_model, vsize_src, vsize_tar, d_ff):
@@ -38,10 +37,29 @@ class Transformer(nn.Module):
 		'''
 		source: [B, Ls] (int from range(Vs))
 		src_mask: [B, Ls]
+		max_length: int
 		---
 		res: [B, Lt] (int from range(Vs))
 		'''
-		pass
+		B = source.size(0)
+		enc_out = self.enc(source, src_mask)
+		next_token = torch.full((B, 1), sos_idx, device=device, dtype=torch.long)
+		interm = next_token
+		next_mask = torch.full(interm.shape, False, device=device, dtype=torch.bool)
+		interm_mask = next_mask
+		for _ in range(max_length):
+			out_probs = self.dec(enc_out, interm, src_mask, interm_mask) # [B, Lt, Vt]
+			next_probs = out_probs[:, -1, :] # [B, Vt]
+			prev_token = next_token
+			next_token = torch.argmax(next_probs, dim=1).view(B, 1) # [B, 1]
+			next_mask = next_mask + (prev_token == eos_idx) # mask terminated seq
+			interm = torch.cat([interm, next_token], dim=1)
+			interm_mask = torch.cat([interm_mask, next_mask], dim=1)
+			if torch.prod(next_mask).item():
+				break # all terminated
+		interm[interm_mask] = pad_idx
+		res = interm[:, :-1]
+		return res
 
 def maskedNLL(out_probs, target, tar_mask):
 	'''

@@ -8,14 +8,8 @@ from model import Transformer
 
 import torch
 import torch.optim as optim
+from const import *
 
-# TODO: use these information.
-sos_idx = 0
-eos_idx = 1
-pad_idx = 2
-max_length = 50
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def make_tensor(idx_list):
     '''
@@ -75,16 +69,17 @@ def main(args):
 
         train_loader = get_loader(src['train'], tgt['train'], src_vocab, tgt_vocab, batch_size=args.batch_size, shuffle=True)
         valid_loader = get_loader(src['valid'], tgt['valid'], src_vocab, tgt_vocab, batch_size=args.batch_size)
-
-        net.train()
+        
         net.to(device)
         optimizer = optim.Adam(net.parameters(), lr=0.001)
 
         best_valid_loss = 10.0
         for epoch in range(args.epochs):
             print("Epoch {0}".format(epoch))
+            net.train()
             train_loss = run_epoch(net, train_loader, optimizer)
             print("train loss: {0}".format(train_loss))
+            net.eval()
             valid_loss = run_epoch(net, valid_loader, None)
             print("valid loss: {0}".format(valid_loss))
             if valid_loss < best_valid_loss:
@@ -93,14 +88,18 @@ def main(args):
     else:
         # test
         net = torch.load('data/ckpt/best_model')
+        net.to(device)
+        net.eval()
 
         test_loader = get_loader(src['test'], tgt['test'], src_vocab, tgt_vocab, batch_size=args.batch_size)
 
         pred = []
         for src_batch, tgt_batch in test_loader:
             # TODO: predict pred_batch from src_batch with your model.
-            pred_batch = tgt_batch
-
+            #pred_batch = tgt_batch
+            source, src_mask = make_tensor(src_batch)
+            res = net.decode(source, src_mask)
+            # TODO: make list of lists
             # every sentences in pred_batch should start with <sos> token (index: 0) and end with <eos> token (index: 1).
             # every <pad> token (index: 2) should be located after <eos> token (index: 1).
             # example of pred_batch:

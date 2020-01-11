@@ -1,5 +1,6 @@
 import torch
 from model import *
+from const import *
 
 def test1():
 
@@ -45,5 +46,25 @@ def test2():
 	#print(dec_cross)
 
 
+def test3():
+	# decoding test
+	n_blocks = 6
+	d_model = 512
+	vsize_src = 100
+	vsize_tar = 5
+	d_ff = 2048
+	net = Transformer(n_blocks, d_model, vsize_src, vsize_tar, d_ff)
+	batch_size=4
+	len_src=10
+	source = torch.zeros([batch_size, len_src], dtype=torch.long)
+	src_mask = torch.zeros([batch_size, len_src], dtype=torch.bool)
+	for b in range(batch_size):
+		src_mask[b, np.random.randint(len_src//2, len_src):] = 1
 
-test1()
+	source = source.to(device)
+	src_mask = src_mask.to(device)
+	net.to(device)
+
+	net.decode(source, src_mask)
+
+test3()
