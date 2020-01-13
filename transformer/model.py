@@ -30,6 +30,9 @@ class Transformer(nn.Module):
 		'''
 		enc_out = self.enc(source, src_mask)
 		out_probs = self.dec(enc_out, target, src_mask, tar_mask)
+		target = target[:, 1:] # <sos> is not a target
+		tar_mask = tar_mask[:, 1:]
+		out_probs = out_probs[:, :-1] # no prediction next to <eos>
 		loss = maskedNLL(out_probs, target, tar_mask)
 		return loss
 
@@ -48,6 +51,7 @@ class Transformer(nn.Module):
 		next_mask = torch.full(interm.shape, False, device=device, dtype=torch.bool)
 		interm_mask = next_mask
 		for _ in range(max_length):
+
 			out_probs = self.dec(enc_out, interm, src_mask, interm_mask) # [B, Lt, Vt]
 			next_probs = out_probs[:, -1, :] # [B, Vt]
 			prev_token = next_token

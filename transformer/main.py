@@ -71,7 +71,7 @@ def main(args):
         valid_loader = get_loader(src['valid'], tgt['valid'], src_vocab, tgt_vocab, batch_size=args.batch_size)
         
         net.to(device)
-        optimizer = optim.Adam(net.parameters(), lr=0.001)
+        optimizer = optim.Adam(net.parameters(), lr=args.lr)
 
         best_valid_loss = 10.0
         for epoch in range(args.epochs):
@@ -118,6 +118,7 @@ def main(args):
 
         os.system('bash scripts/bleu.sh data/results/pred.txt data/multi30k/test.de.atok')
 
+
 def overfit_test(args):
     src, tgt = load_data(args.path)
 
@@ -137,10 +138,12 @@ def overfit_test(args):
     for src_batch, tgt_batch in train_loader:
         break
     net.to(device)
-    optimizer = optim.Adam(net.parameters(), lr=0.001)
+    optimizer = optim.Adam(net.parameters(), lr=args.lr)
     for epoch in range(args.epochs):
         loss = run_batch(net, src_batch, tgt_batch, optimizer)
         print(loss)
+    saved_info = (src_batch, tgt_batch, net)
+    torch.save(saved_info, 'data/saved_info')
     source, src_mask = make_tensor(src_batch)
     source = source.to(device)
     src_mask = src_mask.to(device)
@@ -150,6 +153,7 @@ def overfit_test(args):
     print(tgt_batch)
     print("Decoding result:")
     print(pred_batch)
+
 
 def run_batch(net, src_batch, tgt_batch, optimizer):
         B = len(src_batch)
@@ -177,16 +181,21 @@ if __name__ == '__main__':
     parser.add_argument(
         '--epochs',
         type=int,
-        default=100)
+        default=1000)
     parser.add_argument(
         '--batch_size',
         type=int,
         default=128)
+    parser.add_argument(
+        '--lr',
+        type=float,
+        default=0.0001)
 
     parser.add_argument(
         '--test',
         action='store_true')
     args = parser.parse_args()
 
-    overfit_test(args)
-    #main(args)
+    #fast_overfit_test()
+    #overfit_test(args)
+    main(args)
