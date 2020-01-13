@@ -14,10 +14,10 @@ Dm: model dimension
 '''
 
 class Transformer(nn.Module):
-	def __init__(self, n_blocks, d_model, vsize_src, vsize_tar, d_ff):
+	def __init__(self, n_blocks, d_model, vsize_src, vsize_tar, d_ff, dropout=0.1):
 		super(Transformer, self).__init__()
-		self.enc = Encoder(n_blocks, d_model, vsize_src, d_ff)
-		self.dec = Decoder(n_blocks, d_model, vsize_tar, d_ff)
+		self.enc = Encoder(n_blocks, d_model, vsize_src, d_ff, dropout)
+		self.dec = Decoder(n_blocks, d_model, vsize_tar, d_ff, dropout)
 
 	def loss(self, source, src_mask, target, tar_mask):
 		'''
@@ -80,12 +80,13 @@ def maskedNLL(out_probs, target, tar_mask):
 	return nll
 
 class Encoder(nn.Module):
-	def __init__(self, n_blocks, d_model, vsize_src, d_ff):
+	def __init__(self, n_blocks, d_model, vsize_src, d_ff, dropout):
 		super(Encoder, self).__init__()
 		self.n_blocks = n_blocks
 		self.embedding = nn.Embedding(vsize_src, d_model)
-		block_list = [EncoderBlock(d_model, d_ff) for _ in range(n_blocks)]
+		block_list = [EncoderBlock(d_model, d_ff, dropout) for _ in range(n_blocks)]
 		self.enc_blocks = nn.ModuleList(block_list)
+		self.dropout = nn.Dropout(p=dropout)
 
 	def forward(self, source, src_mask):
 		'''
@@ -97,6 +98,7 @@ class Encoder(nn.Module):
 		mask = expand_mask(src_mask, Lq=None, autoreg=False)
 		emb = self.embedding(source) # [B, Ls, Dm]
 		emb = emb + positional_encoding(emb.shape)
+		emb = self.dropout(emb)
 		for n in range(self.n_blocks):
 			emb = self.enc_blocks[n](emb, mask)
 		enc_out = emb
@@ -104,16 +106,17 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-	def __init__(self, n_blocks, d_model, vsize_tar, d_ff):
+	def __init__(self, n_blocks, d_model, vsize_tar, d_ff, dropout):
 		super(Decoder, self).__init__()
 		self.n_blocks = n_blocks
 		self.embedding = nn.Embedding(vsize_tar, d_model)
-		block_list = [DecoderBlock(d_model, d_ff) for _ in range(n_blocks)]
+		block_list = [DecoderBlock(d_model, d_ff, dropout) for _ in range(n_blocks)]
 		self.dec_blocks = nn.ModuleList(block_list)
 		self.out_layer = nn.Sequential(
 			nn.Linear(d_model, vsize_tar),
 			nn.Softmax(dim=2)
 		)
+		self.dropout = nn.Dropout(p=dropout)
 
 	def forward(self, enc_out, target, src_mask, tar_mask):
 		'''
@@ -128,6 +131,7 @@ class Decoder(nn.Module):
 		cross_mask = expand_mask(src_mask, Lq=tar_mask.size(1), autoreg=False)
 		emb = self.embedding(target)
 		emb = emb + positional_encoding(emb.shape)
+		emb = self.dropout(emb)
 		for n in range(self.n_blocks):
 			emb = self.dec_blocks[n](emb, enc_out, self_mask, cross_mask)
 		out_probs = self.out_layer(emb)
@@ -135,7 +139,7 @@ class Decoder(nn.Module):
 
 
 class EncoderBlock(nn.Module):
-	def __init__(self, d_model, d_ff):
+	def __init__(self, d_model, d_ff, dropout):
 		super(EncoderBlock, self).__init__()
 		self.feedforward = nn.Sequential(
 			nn.Linear(d_model, d_ff),
@@ -144,6 +148,8 @@ class EncoderBlock(nn.Module):
 		)
 		self.layernorm1 = nn.LayerNorm(d_model)
 		self.layernorm2 = nn.LayerNorm(d_model)
+		self.dropout1 = nn.Dropout(p=dropout)
+		self.dropout2 = nn.Dropout(p=dropout)
 		self.multihead = MultiHeadAttn(d_model)
 
 	def forward(self, b_in, mask):
@@ -154,14 +160,14 @@ class EncoderBlock(nn.Module):
 		b_out: [B, Ls, Dm]
 		'''
 		z1 = self.multihead(b_in, b_in, b_in, mask)
-		a1 = self.layernorm1(z1 + b_in)
+		a1 = self.layernorm1(self.dropout1(z1) + b_in)
 		z2 = self.feedforward(a1)
-		b_out = self.layernorm2(z2 + a1)
+		b_out = self.layernorm2(self.dropout2(z2) + a1)
 		return b_out
 
 
 class DecoderBlock(nn.Module):
-	def __init__(self, d_model, d_ff):
+	def __init__(self, d_model, d_ff, dropout):
 		super(DecoderBlock, self).__init__()
 		self.feedforward = nn.Sequential(
 			nn.Linear(d_model, d_ff),
@@ -171,6 +177,9 @@ class DecoderBlock(nn.Module):
 		self.layernorm1 = nn.LayerNorm(d_model)
 		self.layernorm2 = nn.LayerNorm(d_model)
 		self.layernorm3 = nn.LayerNorm(d_model)
+		self.dropout1 = nn.Dropout(p=dropout)
+		self.dropout2 = nn.Dropout(p=dropout)
+		self.dropout3 = nn.Dropout(p=dropout)
 		self.self_multihead = MultiHeadAttn(d_model)
 		self.cross_multihead = MultiHeadAttn(d_model)
 
@@ -184,11 +193,11 @@ class DecoderBlock(nn.Module):
 		'''
 		b_out = b_in
 		z1 = self.self_multihead(b_in, b_in, b_in, self_mask)
-		a1 = self.layernorm1(z1 + b_in)
+		a1 = self.layernorm1(self.dropout1(z1) + b_in)
 		z2 = self.cross_multihead(a1, enc_out, enc_out, cross_mask)
-		a2 = self.layernorm2(z2 + a1)
+		a2 = self.layernorm2(self.dropout2(z2) + a1)
 		z3 = self.feedforward(a2)
-		b_out = self.layernorm3(z3 + a2)
+		b_out = self.layernorm3(self.dropout3(z3) + a2)
 		return b_out
 
 

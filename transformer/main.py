@@ -88,7 +88,7 @@ def main(args):
                 torch.save(net, 'data/ckpt/best_model')
     else:
         # test
-        net = torch.load('data/ckpt/model1_ckpts/m1_20_eps')
+        net = torch.load('data/ckpt/last_model')
         net.to(device)
         net.eval()
 
