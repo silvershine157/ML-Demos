@@ -14,7 +14,7 @@ Dm: model dimension
 '''
 
 class Transformer(nn.Module):
-	def __init__(self, n_blocks, d_model, vsize_src, vsize_tar, d_ff, dropout=0.1):
+	def __init__(self, vsize_src, vsize_tar, n_blocks=6, d_model=512, d_ff=2048, dropout=0.1):
 		super(Transformer, self).__init__()
 		self.enc = Encoder(n_blocks, d_model, vsize_src, d_ff, dropout)
 		self.dec = Decoder(n_blocks, d_model, vsize_tar, d_ff, dropout)

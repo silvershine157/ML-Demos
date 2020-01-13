@@ -58,12 +58,9 @@ def main(args):
     tgt_vocab = Vocab(init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>')
     tgt_vocab.load(os.path.join(args.path, 'vocab.de'))
 
-    n_blocks = 6
-    d_model = 512
     vsize_src = len(src_vocab)
     vsize_tar = len(tgt_vocab)
-    d_ff = 2048
-    net = Transformer(n_blocks, d_model, vsize_src, vsize_tar, d_ff)
+    net = Transformer(vsize_src, vsize_tar)
 
     if not args.test:
 
@@ -119,57 +116,6 @@ def main(args):
         os.system('bash scripts/bleu.sh data/results/pred.txt data/multi30k/test.de.atok')
 
 
-def overfit_test(args):
-    src, tgt = load_data(args.path)
-
-    src_vocab = Vocab(init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>')
-    src_vocab.load(os.path.join(args.path, 'vocab.en'))
-    tgt_vocab = Vocab(init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>')
-    tgt_vocab.load(os.path.join(args.path, 'vocab.de'))
-
-    n_blocks = 6
-    d_model = 512
-    vsize_src = len(src_vocab)
-    vsize_tar = len(tgt_vocab)
-    d_ff = 2048
-    net = Transformer(n_blocks, d_model, vsize_src, vsize_tar, d_ff)
-
-    train_loader = get_loader(src['train'], tgt['train'], src_vocab, tgt_vocab, batch_size=args.batch_size, shuffle=True)
-    for src_batch, tgt_batch in train_loader:
-        break
-    net.to(device)
-    optimizer = optim.Adam(net.parameters(), lr=args.lr)
-    for epoch in range(args.epochs):
-        loss = run_batch(net, src_batch, tgt_batch, optimizer)
-        print(loss)
-    saved_info = (src_batch, tgt_batch, net)
-    torch.save(saved_info, 'data/saved_info')
-    source, src_mask = make_tensor(src_batch)
-    source = source.to(device)
-    src_mask = src_mask.to(device)
-    res = net.decode(source, src_mask)
-    pred_batch = res.tolist()
-    print("Ground truth:")
-    print(tgt_batch)
-    print("Decoding result:")
-    print(pred_batch)
-
-
-def run_batch(net, src_batch, tgt_batch, optimizer):
-        B = len(src_batch)
-        if optimizer:
-            optimizer.zero_grad()
-        source, src_mask = make_tensor(src_batch)
-        target, tar_mask = make_tensor(tgt_batch)
-        source = source.to(device)
-        src_mask = src_mask.to(device)
-        target = target.to(device)
-        tar_mask = tar_mask.to(device)
-        loss = net.loss(source, src_mask, target, tar_mask)
-        if optimizer:
-            loss.backward()
-            optimizer.step()
-        return loss.item()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Transformer')
