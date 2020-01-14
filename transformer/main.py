@@ -85,7 +85,7 @@ def main(args):
                 torch.save(net, 'data/ckpt/best_model')
     else:
         # test
-        net = torch.load('data/ckpt/last_model')
+        net = torch.load('data/ckpt/best_model')
         net.to(device)
         net.eval()
 
@@ -107,7 +107,7 @@ def main(args):
             #  [0, 6, 1, 2, 2]]
             pred += seq2sen(pred_batch, tgt_vocab)
             iter_cnt += 1
-            print(pred_batch)
+            #print(pred_batch)
 
         with open('data/results/pred.txt', 'w') as f:
             for line in pred:

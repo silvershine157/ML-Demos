@@ -202,9 +202,8 @@ class DecoderBlock(nn.Module):
 
 
 class MultiHeadAttn(nn.Module):
-	def __init__(self, d_model):
+	def __init__(self, d_model, n_heads=8):
 		super(MultiHeadAttn, self).__init__()
-		n_heads = 8
 		self.n_heads = n_heads
 		d_k = d_model//n_heads
 		d_v = d_k
