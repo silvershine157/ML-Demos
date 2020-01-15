@@ -17,4 +17,16 @@ def test2():
 		net(batch["image"])
 		break
 
-test2()
+def test3():
+	Dx = 28*28
+	Dz = 10
+	vae = VAE(Dx, Dz)
+
+	B = 4
+	x = torch.zeros(B, Dx)
+	
+	loss = vae.loss(x)
+
+	print(loss)
+
+test3()
