@@ -18,14 +18,15 @@ def test2():
 		break
 
 def test3():
-	Dx = 28*28
+	H = 28
+	W = 28
 	Dz = 10
-	vae = VAE(Dx, Dz)
+	vae = VAE(H, W, Dz)
 
 	B = 4
-	x = torch.zeros(B, Dx)
+	x2d = torch.zeros(B, H, W)
 	
-	loss = vae.loss(x)
+	loss = vae.loss(x2d)
 
 	print(loss)
 
