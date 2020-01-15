@@ -25,9 +25,6 @@ parser.add_argument('--download', action='store_true')
 args = parser.parse_args()
 
 
-def mse_loss(y_h, target):
-	err = y_h - target
-	return torch.mean(torch.mul(err, err))
 
 def train_epoch(net, loader, optimizer):
 	running_loss = 0.0
@@ -36,7 +33,8 @@ def train_epoch(net, loader, optimizer):
 	for batch_idx, batch in enumerate(loader):
 		optimizer.zero_grad()
 		image = batch["image"].to(device)
-		loss = net.loss(image)
+		#loss = net.loss(image)
+		loss = net.loss_alternate(image)
 		loss.backward()
 		optimizer.step()
 		n = image.size(0)
@@ -51,7 +49,8 @@ def test_epoch(net, loader):
 	net.to(device)
 	for batch_idx, batch in enumerate(loader):
 		image = batch["image"].to(device)
-		loss = net.loss(image)
+		#loss = net.loss(image)
+		loss = net.loss_alternate(image)
 		n = image.size(0)
 		running_loss += n * loss.item()
 		running_n += n

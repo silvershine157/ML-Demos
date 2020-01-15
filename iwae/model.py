@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from const import *
 
 
@@ -23,19 +24,34 @@ class VAE(nn.Module):
 		eps = torch.randn((B, self.Dz), device=device)
 		z = mean + torch.sqrt(var+1E-7) * eps # reparametrization
 		x_r = self.dec(z)
-		'''
-		print("HIHI")
-		print(torch.max(x_r))
-		print(torch.max(x))
-		print(torch.min(x_r))
-		print(torch.min(x))
-		'''
-		negLL = nn.functional.binary_cross_entropy(x_r, x, reduction='mean')
+		LL = -nn.functional.binary_cross_entropy(x_r, x, reduction='mean')
 		KLD = unitGaussianKLD(mean, var)
-		ELBO = self.Dx*(-negLL) - self.Dz*KLD # TODO: Is this correct?
+		ELBO = self.Dx*LL - self.Dz*KLD # TODO: Is this correct?
 		loss = -ELBO
 		return loss
 
+	def loss_alternate(self, x2d):
+		# no KLD
+		'''
+		x2d: [B, H, W]
+		---
+		loss: float
+		'''
+		B, H, W = x2d.size()
+		x = x2d.view(B, H*W)
+		mean, var = self.enc(x)
+		eps = torch.randn((B, self.Dz), device=device)
+		z = mean + torch.sqrt(var+1E-7) * eps # reparametrization
+		x_r = self.dec(z)
+		unit_mean = torch.zeros(B, self.Dz, device=device)
+		unit_var =  torch.ones(B, self.Dz, device=device)
+		log_p_z = self.Dz*factorizedGaussianLogPdf(z, unit_mean, unit_var)
+		log_p_x_given_z = -self.Dx*nn.functional.binary_cross_entropy(x_r, x, reduction='mean')
+		log_p_x_z = log_p_z + log_p_x_given_z
+		log_q_z_given_x = self.Dz*factorizedGaussianLogPdf(z, mean, var)
+		ELBO = log_p_x_z - log_q_z_given_x
+		loss = -ELBO
+		return loss
 
 def unitGaussianKLD(mean, var):
 	'''
@@ -46,6 +62,18 @@ def unitGaussianKLD(mean, var):
 	'''
 	KLD = 0.5*torch.mean(1. + torch.log(var+1E-7) - mean**2 - var)
 	return KLD
+
+def factorizedGaussianLogPdf(z, mean, var):
+	'''
+	z: [B, Dz]
+	mean: [B, Dz]
+	var: [B, Dz]
+	---
+	log_p: float
+	'''
+	log_p_each = -0.5*((z-mean)**2/(var+1E-7)) - torch.log(torch.sqrt(2*np.pi*var+1E-7))
+	log_p = torch.mean(log_p_each)
+	return log_p
 
 class Encoder(nn.Module):
 	def __init__(self, Dx, Dz):
