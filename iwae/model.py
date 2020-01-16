@@ -24,10 +24,10 @@ class VAE(nn.Module):
 		eps = torch.randn((B, self.Dz), device=device)
 		z = mean + torch.sqrt(var+1E-7) * eps # reparametrization
 		x_r = self.dec(z)
-		LL = -nn.functional.binary_cross_entropy(x_r, x, reduction='mean')
+		log_p_x_given_z = bernoulliLL(x, x_r)
 		KLD = unitGaussianKLD(mean, var)
-		ELBO = self.Dx*LL - self.Dz*KLD # TODO: Is this correct?
-		loss = -ELBO
+		ELBO = log_p_x_given_z - KLD
+		loss = -torch.mean(ELBO) # minimization objective for batch
 		return loss
 
 	def loss_alternate(self, x2d):
@@ -36,7 +36,7 @@ class VAE(nn.Module):
 		x2d: [B, H, W]
 		---
 		loss: float
-		'''
+		'''		
 		B, H, W = x2d.size()
 		x = x2d.view(B, H*W)
 		mean, var = self.enc(x)
@@ -45,22 +45,32 @@ class VAE(nn.Module):
 		x_r = self.dec(z)
 		unit_mean = torch.zeros(B, self.Dz, device=device)
 		unit_var =  torch.ones(B, self.Dz, device=device)
-		log_p_z = self.Dz*factorizedGaussianLogPdf(z, unit_mean, unit_var)
-		log_p_x_given_z = -self.Dx*nn.functional.binary_cross_entropy(x_r, x, reduction='mean')
+		log_p_z = factorizedGaussianLogPdf(z, unit_mean, unit_var)
+		log_p_x_given_z = bernoulliLL(x, x_r)
 		log_p_x_z = log_p_z + log_p_x_given_z
-		log_q_z_given_x = self.Dz*factorizedGaussianLogPdf(z, mean, var)
+		log_q_z_given_x = factorizedGaussianLogPdf(z, mean, var)
 		ELBO = log_p_x_z - log_q_z_given_x
-		loss = -ELBO
-		return loss
+		loss = -torch.mean(ELBO) # minimization objective for batch
+		return loss	
+
+def bernoulliLL(x, x_r):
+	'''
+	x: [B, Dx]
+	x_r: [B, Dx]
+	---
+	LL: [B]
+	'''
+	LL = torch.sum(x*torch.log(x_r)+(1-x)*torch.log(1-x_r), dim=1)
+	return LL
 
 def unitGaussianKLD(mean, var):
 	'''
 	mean: [B, Dz]
 	var: [B, Dz]
 	---
-	KLD: float  (= KLD[N(mean, var) || N(0, I)])
+	KLD: [B] (= KLD[N(mean, var) || N(0, I)])
 	'''
-	KLD = 0.5*torch.mean(1. + torch.log(var+1E-7) - mean**2 - var)
+	KLD = -0.5*torch.sum(1. + torch.log(var+1E-7) - mean**2 - var, dim=1)
 	return KLD
 
 def factorizedGaussianLogPdf(z, mean, var):
@@ -69,10 +79,10 @@ def factorizedGaussianLogPdf(z, mean, var):
 	mean: [B, Dz]
 	var: [B, Dz]
 	---
-	log_p: float
+	log_p: [B]
 	'''
 	log_p_each = -0.5*((z-mean)**2/(var+1E-7)) - torch.log(torch.sqrt(2*np.pi*var+1E-7))
-	log_p = torch.mean(log_p_each)
+	log_p = torch.sum(log_p_each, dim=1)
 	return log_p
 
 class Encoder(nn.Module):

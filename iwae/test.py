@@ -1,5 +1,6 @@
 from dataset import *
 from model import *
+from const import *
 
 def test1():
 	data = preprocess_data()
@@ -22,12 +23,12 @@ def test3():
 	W = 28
 	Dz = 10
 	vae = VAE(H, W, Dz)
+	vae.to(device)
 
 	B = 4
-	x2d = torch.zeros(B, H, W)
+	x2d = torch.zeros((B, H, W), device=device)
 	
 	loss = vae.loss(x2d)
-
 	print(loss)
 
 test3()
