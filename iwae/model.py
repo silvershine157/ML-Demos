@@ -82,6 +82,28 @@ class VAE(nn.Module):
 		loss = -torch.mean(obj) # minimization objective for batch
 		return loss
 
+	def mc_loss(self, x2d):
+		# MC estimator for marginal LL (Jensen on p(z))
+		'''
+		x2d: [B, H, W]
+		---
+		loss: float
+		'''
+		B, H, W = x2d.size()
+		x = x2d.view(B, H*W)
+		K = 20 # number of samples (Dz=2, K=20 works!)
+		all_log_p_x_given_z = torch.zeros((B, K), device=device)
+		for k in range(K):
+			z = torch.randn((B, self.Dz), device=device)
+			x_r = self.dec(z)
+			all_log_p_x_given_z[:, k] = bernoulliLL(x, x_r)
+		# lower bound estimatior
+		log_rscl_factors = torch.max(all_log_p_x_given_z, dim=1, keepdim=True)[0] 
+		log_p_x_given_z_rscl = torch.exp(all_log_p_x_given_z - log_rscl_factors) # broadcasting		
+		obj = torch.log(torch.mean(log_p_x_given_z_rscl,dim=1)+1E-7)+log_rscl_factors
+		loss = -torch.mean(obj)
+		return loss
+
 def bernoulliLL(x, x_r):
 	'''
 	x: [B, Dx]
