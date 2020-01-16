@@ -33,7 +33,8 @@ def test3():
 def test4():
 	Dz = 3
 	N = 5
+	net = VAE(28, 28, Dz).to(device)
 	z_grid = make_z_grid(Dz, N)
-	print(z_grid)
+	show_img_grid(net, z_grid)
 
 test4()

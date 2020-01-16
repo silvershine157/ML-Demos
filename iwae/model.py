@@ -59,7 +59,7 @@ class VAE(nn.Module):
 		---
 		loss: float
 		'''
-		K = 1 # number of samples
+		K = 5 # number of samples
 		B, H, W = x2d.size()
 		x = x2d.view(B, H*W)
 		mean, var = self.enc(x)

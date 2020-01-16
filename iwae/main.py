@@ -2,6 +2,7 @@ import torch
 import os
 import argparse
 import torch.optim as optim
+import matplotlib.pyplot as plt
 
 from dataset import *
 from model import *
@@ -83,7 +84,12 @@ def show_img_grid(net, z_grid):
 	net: VAE
 	z_grid: [N, N, Dz]
 	'''
-	img_grid = None # img_grid: [N, N, H, W]
+	N, _, Dz = z_grid.size()
+	z_batch = z_grid.view(N*N, Dz).to(device)
+	dec_img = net.dec(z_batch).cpu().detach().view(N*N, 28, 28)
+	img_grid = dec_img.view(N, N, 28, 28).numpy()
+	img_cat = np.concatenate(np.concatenate(img_grid, axis=2), axis=0)
+	plt.imshow(img_cat)
 
 
 def main():
@@ -126,6 +132,9 @@ def main():
 
 	# train model
 	if args.train:
+		plt.ion()
+		plt.show()
+		z_grid = make_z_grid(args.latent, 10)
 		print("Training model . . .")
 		net.train()
 		optimizer = optim.Adam(net.parameters(), lr=args.lr)
@@ -138,11 +147,15 @@ def main():
 				net.eval()
 				loss = test_epoch(net, val_loader)
 				print("Validation loss: %4f"%(loss))
-				if best_loss==None or loss > best_loss:
+				if best_loss==None or loss < best_loss:
 					# save best model
 					best_loss = loss
 					fname = model_name+'_best_(epoch%d)'%(epoch)
 					torch.save(net, os.path.join(model_dir, fname))
+				show_img_grid(net, z_grid)
+				plt.draw()
+				plt.pause(0.001)
+
 				net.train()
 
 	# test model
