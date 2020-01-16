@@ -59,6 +59,32 @@ def test_epoch(net, loader):
 	avg_loss = running_loss / running_n	
 	return avg_loss
 
+def make_z_grid(Dz, N):
+	'''
+	Dz: int
+	---
+	z_grid: [N, N, Dz]
+	'''
+	if Dz == 2:
+		# coordinate grid
+		z_grid = torch.zeros(N, N, Dz)
+		linsp = torch.linspace(-1, 1, N)
+		z_grid[:, :, 0] = linsp.view(-1, 1)
+		z_grid[:, :, 1] = linsp.view(1, -1)
+	else:
+		# sample randomly
+		z_grid = torch.randn(N, N, Dz)
+
+	return z_grid
+
+
+def show_img_grid(net, z_grid):
+	'''
+	net: VAE
+	z_grid: [N, N, Dz]
+	'''
+	img_grid = None # img_grid: [N, N, H, W]
+
 
 def main():
 

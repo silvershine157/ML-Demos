@@ -1,6 +1,7 @@
 from dataset import *
 from model import *
 from const import *
+from main import *
 
 def test1():
 	data = preprocess_data()
@@ -24,11 +25,15 @@ def test3():
 	Dz = 10
 	vae = VAE(H, W, Dz)
 	vae.to(device)
-
 	B = 4
 	x2d = torch.zeros((B, H, W), device=device)
-	
 	loss = vae.loss(x2d)
 	print(loss)
 
-test3()
+def test4():
+	Dz = 3
+	N = 5
+	z_grid = make_z_grid(Dz, N)
+	print(z_grid)
+
+test4()

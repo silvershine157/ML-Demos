@@ -75,7 +75,8 @@ class VAE(nn.Module):
 			log_p_x_z = log_p_z + log_p_x_given_z
 			log_q_z_given_x = factorizedGaussianLogPdf(z, mean, var)
 			all_log_frac_p_q[:, k] = log_p_x_z - log_q_z_given_x
-		log_rscl_factors = torch.max(all_log_frac_p_q, dim=1, keepdim=True)[0]
+		# rescaling to prevent underflow
+		log_rscl_factors = torch.max(all_log_frac_p_q, dim=1, keepdim=True)[0] 
 		all_frac_p_q_rscl = torch.exp(all_log_frac_p_q - log_rscl_factors) # broadcasting
 		obj = torch.log(torch.mean(all_frac_p_q_rscl,dim=1)+1E-7)+log_rscl_factors
 		loss = -torch.mean(obj) # minimization objective for batch
