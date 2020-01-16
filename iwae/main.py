@@ -34,7 +34,8 @@ def train_epoch(net, loader, optimizer):
 		optimizer.zero_grad()
 		image = batch["image"].to(device)
 		#loss = net.loss(image)
-		loss = net.loss_alternate(image)
+		#loss = net.loss_alternate(image)
+		loss = net.iwae_loss(image)
 		loss.backward()
 		optimizer.step()
 		n = image.size(0)
@@ -50,7 +51,8 @@ def test_epoch(net, loader):
 	for batch_idx, batch in enumerate(loader):
 		image = batch["image"].to(device)
 		#loss = net.loss(image)
-		loss = net.loss_alternate(image)
+		#loss = net.loss_alternate(image)
+		loss = net.iwae_loss(image)
 		n = image.size(0)
 		running_loss += n * loss.item()
 		running_n += n

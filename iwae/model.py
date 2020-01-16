@@ -36,7 +36,7 @@ class VAE(nn.Module):
 		x2d: [B, H, W]
 		---
 		loss: float
-		'''		
+		'''
 		B, H, W = x2d.size()
 		x = x2d.view(B, H*W)
 		mean, var = self.enc(x)
@@ -51,7 +51,35 @@ class VAE(nn.Module):
 		log_q_z_given_x = factorizedGaussianLogPdf(z, mean, var)
 		ELBO = log_p_x_z - log_q_z_given_x
 		loss = -torch.mean(ELBO) # minimization objective for batch
-		return loss	
+		return loss
+
+	def iwae_loss(self, x2d):
+		'''
+		x2d: [B, H, W]
+		---
+		loss: float
+		'''
+		K = 1 # number of samples
+		B, H, W = x2d.size()
+		x = x2d.view(B, H*W)
+		mean, var = self.enc(x)
+		unit_mean = torch.zeros(B, self.Dz, device=device)
+		unit_var =  torch.ones(B, self.Dz, device=device)
+		all_log_frac_p_q = torch.zeros((B, K), device=device)
+		for k in range(K):
+			eps = torch.randn((B, self.Dz), device=device)
+			z = mean + torch.sqrt(var+1E-7) * eps # reparametrization
+			x_r = self.dec(z)
+			log_p_z = factorizedGaussianLogPdf(z, unit_mean, unit_var)
+			log_p_x_given_z = bernoulliLL(x, x_r)
+			log_p_x_z = log_p_z + log_p_x_given_z
+			log_q_z_given_x = factorizedGaussianLogPdf(z, mean, var)
+			all_log_frac_p_q[:, k] = log_p_x_z - log_q_z_given_x
+		log_rscl_factors = torch.max(all_log_frac_p_q, dim=1, keepdim=True)[0]
+		all_frac_p_q_rscl = torch.exp(all_log_frac_p_q - log_rscl_factors) # broadcasting
+		obj = torch.log(torch.mean(all_frac_p_q_rscl,dim=1)+1E-7)+log_rscl_factors
+		loss = -torch.mean(obj) # minimization objective for batch
+		return loss
 
 def bernoulliLL(x, x_r):
 	'''
