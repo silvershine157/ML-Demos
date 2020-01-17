@@ -34,10 +34,10 @@ def train_epoch(net, loader, optimizer):
 	for batch_idx, batch in enumerate(loader):
 		optimizer.zero_grad()
 		image = batch["image"].to(device)
-		#loss = net.loss(image)
+		loss = net.loss(image)
 		#loss = net.loss_alternate(image)
 		#loss = net.iwae_loss(image)
-		loss = net.mc_loss(image)
+		#loss = net.mc_loss(image)
 		loss.backward()
 		optimizer.step()
 		n = image.size(0)
@@ -52,17 +52,17 @@ def test_epoch(net, loader):
 	net.to(device)
 	for batch_idx, batch in enumerate(loader):
 		image = batch["image"].to(device)
-		#loss = net.loss(image)
+		loss = net.loss(image)
 		#loss = net.loss_alternate(image)
 		#loss = net.iwae_loss(image)
-		loss = net.mc_loss(image)
+		#loss = net.mc_loss(image)
 		n = image.size(0)
 		running_loss += n * loss.item()
 		running_n += n
 	avg_loss = running_loss / running_n	
 	return avg_loss
 
-def make_z_grid(Dz, N):
+def make_z_grid(Dz, N, limit=1.0):
 	'''
 	Dz: int
 	---
@@ -71,7 +71,7 @@ def make_z_grid(Dz, N):
 	if Dz == 2:
 		# coordinate grid
 		z_grid = torch.zeros(N, N, Dz)
-		linsp = torch.linspace(-1, 1, N)
+		linsp = torch.linspace(-limit, limit, N)
 		z_grid[:, :, 0] = linsp.view(-1, 1)
 		z_grid[:, :, 1] = linsp.view(1, -1)
 	else:
@@ -136,7 +136,7 @@ def main():
 	if args.train:
 		plt.ion()
 		plt.show()
-		z_grid = make_z_grid(args.latent, 10)
+		z_grid = make_z_grid(args.latent, 16, limit=1.3)
 		print("Training model . . .")
 		net.train()
 		optimizer = optim.Adam(net.parameters(), lr=args.lr)
