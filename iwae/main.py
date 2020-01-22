@@ -34,10 +34,10 @@ def train_epoch(net, loader, optimizer):
 	for batch_idx, batch in enumerate(loader):
 		optimizer.zero_grad()
 		image = batch["image"].to(device)
-		loss = net.loss(image)
+		#loss = net.loss(image)
 		#loss = net.loss_alternate(image)
 		#loss = net.iwae_loss(image)
-		#loss = net.mc_loss(image)
+		loss = net.mc_loss(image)
 		loss.backward()
 		optimizer.step()
 		n = image.size(0)
@@ -52,10 +52,10 @@ def test_epoch(net, loader):
 	net.to(device)
 	for batch_idx, batch in enumerate(loader):
 		image = batch["image"].to(device)
-		loss = net.loss(image)
+		#loss = net.loss(image)
 		#loss = net.loss_alternate(image)
 		#loss = net.iwae_loss(image)
-		#loss = net.mc_loss(image)
+		loss = net.mc_loss(image)
 		n = image.size(0)
 		running_loss += n * loss.item()
 		running_n += n
@@ -136,7 +136,7 @@ def main():
 	if args.train:
 		plt.ion()
 		plt.show()
-		z_grid = make_z_grid(args.latent, 16, limit=1.3)
+		z_grid = make_z_grid(args.latent, 8, limit=1.0)
 		print("Training model . . .")
 		net.train()
 		optimizer = optim.Adam(net.parameters(), lr=args.lr)

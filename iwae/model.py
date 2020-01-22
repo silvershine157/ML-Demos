@@ -91,7 +91,7 @@ class VAE(nn.Module):
 		'''
 		B, H, W = x2d.size()
 		x = x2d.view(B, H*W)
-		K = 20 # number of samples (Dz=2, K=20 works!)
+		K = 5 # number of samples (Dz=2, K=20 works!)
 		all_log_p_x_given_z = torch.zeros((B, K), device=device)
 		for k in range(K):
 			z = torch.randn((B, self.Dz), device=device)
