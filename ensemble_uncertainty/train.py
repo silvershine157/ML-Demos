@@ -1,28 +1,48 @@
 import torch
 from model import GaussianMLP, BasicMLP
 
-def test1():
-	x = torch.zeros([4, 1])
-	gmlp = GaussianMLP()
-	bmlp = BasicMLP()
-	mu, var = gmlp(x)
-	print(mu.shape)
-	print(var.shape)
-	mu = bmlp(x)
-	print(mu.shape)
 
-def test2():
-	x = torch.linspace(0, 2, 100).view([100, 1])
-	y = torch.abs(x-1.0)
-	train_ensmeble(BasicMLP, x, y, 5)
+def train_single(net, x, y, epsilon):
+	'''
+	net: GaussianMLP | BasicMLP
+	x: [B, 1]
+	y: [B, 1]
+	---
+	loss: float
+	'''
+	net.train()
+	optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
+	n_iters = 1000
+	for iter_i in range(n_iters):
+		if epsilon is None:
+			optimizer.zero_grad()
+			loss = net.loss(x, y)
+			loss.backward()
+			optimizer.step()
+		else:
+			# adversarial training
+			optimizer.zero_grad()
+			x_temp = x.clone()
+			x_temp.requires_grad_(True)
+			orig_loss = net.loss(x_temp, y)
+			orig_loss.backward()
+			x_adv = x + epsilon*torch.sign(x_temp.grad)
+			optimizer.zero_grad()
+			adv_loss = net.loss(x_adv, y)
+			loss = net.loss(x, y) + adv_loss
+			loss.backward()
+			optimizer.step()
+	loss = loss.item() # final loss
+	return loss
 
 
-def train_ensmeble(module, x, y, ens_size):
-	nets = [module() for _ in range(ens_size)]
+def train_ensmeble(module, x, y, ens_size, epsilon=None):
+	nets = [module(d_hidden=100) for _ in range(ens_size)]
 	for net_i, net in enumerate(nets):
-		loss = train_single(net, x, y)
+		loss = train_single(net, x, y, epsilon)
 		print('Net %d: final loss = %.3f'%(net_i, loss))
 	return nets
+
 
 def ensemble_prediction(nets, x):
 	'''
@@ -59,25 +79,4 @@ def ensemble_prediction(nets, x):
 		var_ens = var_ens.numpy()
 
 	return mu_ens, var_ens
-
-
-def train_single(net, x, y):
-	'''
-	net: GaussianMLP | BasicMLP
-	x: [B, 1]
-	y: [B, 1]
-	---
-	loss: float
-	'''
-	net.train()
-	optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
-	n_iters = 1000
-	for iter_i in range(n_iters):
-		optimizer.zero_grad()
-		loss = net.loss(x, y)
-		loss.backward()
-		optimizer.step()
-		#print("loss: %.3f"%(loss.item()))
-	loss = loss.item() # final loss
-	return loss
 

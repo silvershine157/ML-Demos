@@ -28,7 +28,6 @@ def draw_graph(x,x_set,y_set,mean_predict,std):
     plt.plot(x_set, y_set,'ro', label = 'data points')
     plt.plot(x, mean_predict, label='Predicted mean', color='grey')
     plt.fill_between(x.reshape(-1), (mean_predict-3*std).reshape(100,), (mean_predict+3*std).reshape(100,),color='grey',alpha=0.3)
-
-
+ 
     plt.legend()
     plt.show()

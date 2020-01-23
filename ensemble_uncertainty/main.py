@@ -39,19 +39,18 @@ def main(args):
     # Training a Gaussian MLP with NLL & Adversarial Training
     # TODO:Draw Fig1.3
     elif args.fig == 3:
-
+        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=1, epsilon=epsilon)
+        mean, var = ensemble_prediction(nets, x_test)        
         # Have to calculte predicted mean and var
         # 'mean' have to be a numpy array with shape [100,1]
         # 'var'  have to be a numpy array with shape [100,1]
-        mean = np.random.randn(100,1)
-        var = np.random.randn(100,1)
         draw_graph(x,x_set,y_set,mean, np.sqrt(var))
 
 
     #Training a Gaussian mixture MLP (Deep ensemble) with NLL
     # TODO: Draw Fig1.4
     else: #args.fig == 4
-        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=10)
+        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=5, epsilon=epsilon)
         mean, var = ensemble_prediction(nets, x_test)    
         # Have to calculte predicted mean and var
         # 'mean' have to be a numpy array with shape [100,1]
