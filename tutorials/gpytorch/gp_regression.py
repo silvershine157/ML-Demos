@@ -4,7 +4,7 @@ import gpytorch
 from matplotlib import pyplot as plt
 
 #train_x = torch.linspace(0, 1, 100)
-train_x = torch.rand()
+train_x = torch.cat([torch.linspace(0.0, 0.35, 35), torch.linspace(0.65, 1.0, 35)])
 train_y = torch.sin(train_x * (2*math.pi)) + 0.2*torch.randn(train_x.size())
 
 class ExactGPModel(gpytorch.models.ExactGP):
@@ -30,7 +30,7 @@ optimizer = torch.optim.Adam([
 ], lr=0.1)
 # marginal log likelihood
 mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
-training_iter=100
+training_iter=1000
 for i in range(training_iter):
 	optimizer.zero_grad()
 	output = model(train_x)

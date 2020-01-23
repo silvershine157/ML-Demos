@@ -3,8 +3,15 @@ import torch
 import gpytorch
 from matplotlib import pyplot as plt
 
-train_x = torch.linspace(0, 1, 15)
-train_y = torch.sin(train_x * (2 * math.pi))
+train_x = torch.linspace(0, 4.5, 100)
+
+#train_y = torch.sin(train_x * (2 * math.pi))
+#train_y = torch.sin(train_x * (2 * math.pi) ) + 0.3*torch.randn(train_x.size())
+#train_y = torch.sin(train_x * (2 * math.pi)) + torch.sin(train_x * (3 * math.pi))
+#train_y = torch.linspace(0.1, 0.0, train_x.size(0))
+#train_y[:2] = 2.0
+train_y = train_x
+train_y = train_y - torch.floor(train_y)
 
 class SpectralMixtureGPModel(gpytorch.models.ExactGP):
 	def __init__(self, train_x, train_y, likelihood):
@@ -27,7 +34,7 @@ likelihood.train()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
 mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
-training_iter = 100
+training_iter = 1000
 for i in range(training_iter):
 	optimizer.zero_grad()
 	output = model(train_x)
@@ -37,7 +44,7 @@ for i in range(training_iter):
 	optimizer.step()
 
 # test
-test_x = torch.linspace(0, 5, 51)
+test_x = torch.linspace(0, 10, 300)
 model.eval()
 likelihood.eval()
 
