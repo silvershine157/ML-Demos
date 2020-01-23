@@ -1,6 +1,7 @@
 from utils import *
 import argparse
-
+from train import *
+from model import *
 
 
 def main(args):
@@ -10,27 +11,28 @@ def main(args):
     batch_size = args.batch_size
     epsilon = 0.01 # Coeffiecient for 'fast gredient sign method'
 
+    x_train = torch.Tensor(x_set)
+    y_train = torch.Tensor(y_set)
+    x_test = torch.Tensor(x)
 
     # Training an ensemble of 5 networks(MLPS) with MSE
     # TODO:Draw Fig1.1
     if args.fig == 1:
-
+        nets = train_ensmeble(BasicMLP, x_train, y_train, ens_size=5)
+        mean, var = ensemble_prediction(nets, x_test)
         # Have to calculte predicted mean and std
         # 'mean' have to be a numpy array with shape [100,1]
         # 'std'  have to be a numpy array with shape [100,1]
-        mean = np.random.randn(100,1)
-        std = np.random.randn(100,1)
-        draw_graph(x,x_set,y_set, mean,std)
+        draw_graph(x,x_set,y_set, mean, np.sqrt(var))
 
     # Training a Gaussian MLP(single network) with NLL score rule
     # TODO:Draw Fig1.2
     elif args.fig == 2:
-
+        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=1)
+        mean, var = ensemble_prediction(nets, x_test)
         # Have to calculte predicted mean and var
         # 'mean' have to be a numpy array with shape [100,1]
         # 'var'  have to be a numpy array with shape [100,1]
-        mean = np.random.randn(100,1)
-        var = np.random.randn(100,1)
         draw_graph(x,x_set,y_set,mean, np.sqrt(var))
 
 
@@ -49,12 +51,11 @@ def main(args):
     #Training a Gaussian mixture MLP (Deep ensemble) with NLL
     # TODO: Draw Fig1.4
     else: #args.fig == 4
-
+        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=10)
+        mean, var = ensemble_prediction(nets, x_test)    
         # Have to calculte predicted mean and var
         # 'mean' have to be a numpy array with shape [100,1]
         # 'var'  have to be a numpy array with shape [100,1]
-        mean = np.random.randn(100,1)
-        var = np.random.randn(100,1)
         draw_graph(x,x_set,y_set,mean, np.sqrt(var))
 
 
