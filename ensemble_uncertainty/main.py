@@ -50,7 +50,8 @@ def main(args):
     #Training a Gaussian mixture MLP (Deep ensemble) with NLL
     # TODO: Draw Fig1.4
     else: #args.fig == 4
-        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=5, epsilon=epsilon)
+        #nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=5, epsilon=epsilon)
+        nets = train_ensmeble(GaussianMLP, x_train, y_train, ens_size=5)
         mean, var = ensemble_prediction(nets, x_test)    
         # Have to calculte predicted mean and var
         # 'mean' have to be a numpy array with shape [100,1]

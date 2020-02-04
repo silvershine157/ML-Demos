@@ -11,8 +11,8 @@ def train_single(net, x, y, epsilon):
 	loss: float
 	'''
 	net.train()
-	optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
-	n_iters = 1000
+	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+	n_iters = 10000
 	for iter_i in range(n_iters):
 		if epsilon is None:
 			optimizer.zero_grad()
