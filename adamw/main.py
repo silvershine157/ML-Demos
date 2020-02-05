@@ -29,20 +29,31 @@ def test1():
 	           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 	net = models.vgg11(pretrained=True)
-	#net = models.vgg11(pretrained=False)
 	net.to(device)
-	optimizer = torch.optim.Adam(net.parameters(), lr=0.0001)
-	for epoch in range(100):
-		loss = train_epoch(net, trainloader, optimizer)
-		print(loss)
+	optimizer = torch.optim.SGD(net.parameters(), lr=0.01, weight_decay=0.01)
+	#optimizer = torch.optim.Adam(net.parameters(), lr=0.0001, weight_decay=0.01)
+	#optimizer = torch.optim.AdamW(net.parameters(), lr=0.0001, weight_decay=0.0001)
+	for epoch in range(20):
+		train_loss = train_epoch(net, trainloader, optimizer)
+		test_loss = test_epoch(net, testloader)
+		print("Train loss: %g \t Test loss: %g"%(train_loss, test_loss))
 
 
 def test_epoch(net, loader):
+	running_n = 0
+	running_loss = 0.0
 	for batch_idx, batch in enumerate(loader):
 		x, y = batch
+		x = x.to(device)
+		y = y.to(device)
 		out = net(x)
-		print(out)
-		break
+		loss = nn.functional.cross_entropy(out, y, reduction='mean')
+		loss.backward()
+		B = x.size(0)
+		running_n += B
+		running_loss += B*loss.detach().item()
+	loss = running_loss/running_n
+	return loss
 
 def train_epoch(net, loader, optimizer):
 	running_n = 0
