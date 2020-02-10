@@ -43,7 +43,49 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
     - stpe 2. calculate test samples' confidence score by using Mahalanobis distance and just calculated parameters of class conditional Gaussian distributions
     - step 3. compare the confidence score and the threshold. if confidence score > threshold, it will be assigned to in-distribtuion sample.
     """
+    model = model.cuda()
+    model.eval()
+    with torch.no_grad():
+        for x, y in id_train_loader:
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            '''
+            print("Feature dimensions:")
+            for feature2d in feature_list:
+                feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+                print(feature.shape)
+            break
+            '''
+            feature2d = feature_list[-1]
+            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+            obtain_statistics(feature, y)
+            break
     pass 
+
+def obtain_statistics(feature, y):
+    '''
+    y: [B] : in range(C)
+    feature: [B, D]
+    ---
+    mu: [C, D] # center for each class
+    cov: [D, D] # tied covariance
+    '''
+    C = 10 # number of classes
+    B, D = feature.shape
+    
+    # calculate centers
+    mu = torch.zeros((C, D)).cuda()
+    for c in range(C):
+        mu[c, :] = torch.mean(feature[(y == c)], dim=0)
+    
+    # calculate tied covariance matrix
+    cov_sum = torch.zeros((D, D)).cuda()
+    for b in range(B):
+        dev = feature[b, :] - mu[y[b], :]
+        cov_sum += torch.einsum('i,j->ij', dev, dev)
+    cov = cov_sum/B
+
+    return mu, cov
 
 
 def id_classification_test(model, id_train_loader, id_test_loader, args):
@@ -67,7 +109,7 @@ if __name__ == "__main__":
         parser.add_argument('--alg', type=str, default='mahalanobis', help='baseline | mahalanobis')
         
 
-        parser.add_argument('--train_bs', type=int, default=10000, help='Batch size of in_trainloader.')   
+        parser.add_argument('--train_bs', type=int, default=1000, help='Batch size of in_trainloader.')   
         parser.add_argument('--test_bs', type=int, default=1000, help='Batch size of in_testloader and out_testloader.')   
         parser.add_argument('--threshold', type=int, default=8, help='Threshold.')   
         parser.add_argument('--num_workers', type=int, default=0)
@@ -115,7 +157,7 @@ if __name__ == "__main__":
     
     # load model trained on CIFAR-10 
     model = ResNet34()
-    model.load_state_dict(torch.load('./model/resnet34-31.pth'))
+    model.load_state_dict(torch.load('./data/resnet34-31.pth'))
 
     # ood dectection test
     if args.task == 'ood_detection':
