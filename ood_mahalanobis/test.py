@@ -45,22 +45,26 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
     """
     model = model.cuda()
     model.eval()
+
+    limit = 10 # TODO: remove this
     with torch.no_grad():
+        y_all = []
+        feature_all = []
         for x, y in id_train_loader:
+            if limit <= 0:
+                break
+            else:
+                limit -= 1
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
-            '''
-            print("Feature dimensions:")
-            for feature2d in feature_list:
-                feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-                print(feature.shape)
-            break
-            '''
+            y_all.append(y)
             feature2d = feature_list[-1]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-            obtain_statistics(feature, y)
-            break
-    pass 
+            feature_all.append(feature)
+    y_all = torch.cat(y_all, dim=0)
+    feature_all = torch.cat(feature_all, dim=0)
+    mu, cov = obtain_statistics(feature_all, y_all)
+
 
 def obtain_statistics(feature, y):
     '''
