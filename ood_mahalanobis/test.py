@@ -54,7 +54,7 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         # get statistics
         y_all = []
         feature_all = []
-        limit = 100 # TODO: remove this
+        limit = 1000 # TODO: remove this
         for x, y in id_train_loader:
             if limit <= 0:
                 break
@@ -69,7 +69,7 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         y_all = torch.cat(y_all, dim=0)
         feature_all = torch.cat(feature_all, dim=0)
         mu, cov = obtain_statistics(feature_all, y_all)
-        cov += 1.0*torch.eye(512).cuda()
+        #cov += 1.0*torch.eye(512).cuda()
         
         '''
         preds = torch.softmax(model.linear(mu), dim=1)
@@ -84,7 +84,12 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         
         TPR = 0.
         TNR = 0.
-        threshold = -27.
+        #threshold = -42. # for cov += 1.0*eye(512)
+        #threshold = -365
+        threshold = -730
+
+        invert = False
+        if invert: threshold *= -1
         print("ID test")
         # in-distribution test
         for x, y in id_test_loader:
@@ -94,8 +99,11 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             confidence_score = mahalanobis_score(feature, mu, cov)
             print(confidence_score.mean())
+            if invert: confidence_score *= -1
             TPR += (confidence_score > threshold).sum().item() / id_test_loader.batch_size
-            
+        print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
+
+        
 
         print("OOD test")
         # out-of-distribution test
@@ -106,12 +114,11 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             confidence_score = mahalanobis_score(feature, mu, cov)
             print(confidence_score.mean())
+            if invert: confidence_score *= -1
             TNR += (confidence_score < threshold).sum().item() / ood_test_loader.batch_size
-            
+        print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
 
-        print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))
-
-def mahalanobis_score(feature, mu, cov):
+def mahalanobis_score(feature, mu, cov, return_all=False):
     '''
     feature: [B, D]
     mu: [C, D]
@@ -122,6 +129,8 @@ def mahalanobis_score(feature, mu, cov):
     all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
     all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
     confidence_score = torch.max(all_score, dim=1)[0]
+    if return_all:
+        return confidence_score, all_score
     return confidence_score
 
 
@@ -155,6 +164,43 @@ def id_classification_test(model, id_train_loader, id_test_loader, args):
     """
     TODO : Calculate test accuracy of CIFAR-10 test set by using Mahalanobis classification method 
     """
+
+    model = model.cuda()
+    model.eval()
+    with torch.no_grad():
+
+        # get statistics
+        y_all = []
+        feature_all = []
+        limit = 1000 # TODO: remove this
+        for x, y in id_train_loader:
+            if limit <= 0:
+                break
+            else:
+                limit -= 1
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            y_all.append(y)
+            feature2d = feature_list[-1]
+            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+            feature_all.append(feature)
+        y_all = torch.cat(y_all, dim=0)
+        feature_all = torch.cat(feature_all, dim=0)
+        mu, cov = obtain_statistics(feature_all, y_all)
+
+        n_correct = 0
+        n_all = 0
+        for x, y in id_test_loader:
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            feature2d = feature_list[-1]
+            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+            confidence_score, all_score = mahalanobis_score(feature, mu, cov, return_all=True)
+            y_pred = torch.max(all_score, dim=1)[1]
+            n_correct += torch.sum(y == y_pred).cpu().item()
+            n_all += x.size(0)
+        print(n_correct/n_all)
+        
     pass
 
 
