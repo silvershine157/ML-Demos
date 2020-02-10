@@ -4,6 +4,8 @@ import numpy as np
 from model import ResNet34
 from utils import * 
 
+import matplotlib.pyplot as plt
+
 
 def ood_test_baseline(model, id_train_loader, id_test_loader, ood_test_loader, args):
     """
@@ -46,12 +48,13 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
     model = model.cuda()
     model.eval()
 
-    limit = 10 # TODO: remove this
+     
     with torch.no_grad():
 
         # get statistics
         y_all = []
         feature_all = []
+        limit = 100 # TODO: remove this
         for x, y in id_train_loader:
             if limit <= 0:
                 break
@@ -66,7 +69,23 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         y_all = torch.cat(y_all, dim=0)
         feature_all = torch.cat(feature_all, dim=0)
         mu, cov = obtain_statistics(feature_all, y_all)
-
+        cov += 1.0*torch.eye(512).cuda()
+        
+        '''
+        preds = torch.softmax(model.linear(mu), dim=1)
+        plt.imshow(preds.cpu())
+        plt.show()
+        '''
+        '''
+        w, v = torch.eig(cov)
+        for i in range(512):
+            print(w[i])
+        '''
+        
+        TPR = 0.
+        TNR = 0.
+        threshold = -27.
+        print("ID test")
         # in-distribution test
         for x, y in id_test_loader:
             x, y = x.cuda(), y.cuda()
@@ -74,11 +93,23 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
             feature2d = feature_list[-1]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             confidence_score = mahalanobis_score(feature, mu, cov)
+            print(confidence_score.mean())
+            TPR += (confidence_score > threshold).sum().item() / id_test_loader.batch_size
             
-            break
 
+        print("OOD test")
         # out-of-distribution test
+        for x, y in ood_test_loader:
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            feature2d = feature_list[-1]
+            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+            confidence_score = mahalanobis_score(feature, mu, cov)
+            print(confidence_score.mean())
+            TNR += (confidence_score < threshold).sum().item() / ood_test_loader.batch_size
+            
 
+        print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))
 
 def mahalanobis_score(feature, mu, cov):
     '''
@@ -89,8 +120,7 @@ def mahalanobis_score(feature, mu, cov):
     confidence_score: [B]
     '''
     all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
-    inv_cov = cov.inverse()
-    all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, inv_cov, all_dev) # [B, C]
+    all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
     confidence_score = torch.max(all_score, dim=1)[0]
     return confidence_score
 
