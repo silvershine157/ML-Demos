@@ -35,6 +35,7 @@ def ood_test_baseline(model, id_train_loader, id_test_loader, ood_test_loader, a
         
     print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))
             
+feature_idx = -3
 
 def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader, args):
     """
@@ -47,6 +48,8 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
     """
     model = model.cuda()
     model.eval()
+
+    
 
      
     with torch.no_grad():
@@ -63,30 +66,16 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
             y_all.append(y)
-            feature2d = feature_list[-1]
+            feature2d = feature_list[feature_idx]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             feature_all.append(feature)
         y_all = torch.cat(y_all, dim=0)
         feature_all = torch.cat(feature_all, dim=0)
         mu, cov = obtain_statistics(feature_all, y_all)
-        #cov += 1.0*torch.eye(512).cuda()
-        
-        '''
-        preds = torch.softmax(model.linear(mu), dim=1)
-        plt.imshow(preds.cpu())
-        plt.show()
-        '''
-        '''
-        w, v = torch.eig(cov)
-        for i in range(512):
-            print(w[i])
-        '''
-        
+
         TPR = 0.
         TNR = 0.
-        #threshold = -42. # for cov += 1.0*eye(512)
-        #threshold = -365
-        threshold = -730
+        threshold = -210
 
         invert = False
         if invert: threshold *= -1
@@ -95,12 +84,13 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         for x, y in id_test_loader:
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
-            feature2d = feature_list[-1]
+            feature2d = feature_list[feature_idx]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             confidence_score = mahalanobis_score(feature, mu, cov)
             print(confidence_score.mean())
             if invert: confidence_score *= -1
             TPR += (confidence_score > threshold).sum().item() / id_test_loader.batch_size
+            
         print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
 
         
@@ -110,12 +100,13 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         for x, y in ood_test_loader:
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
-            feature2d = feature_list[-1]
+            feature2d = feature_list[feature_idx]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             confidence_score = mahalanobis_score(feature, mu, cov)
             print(confidence_score.mean())
             if invert: confidence_score *= -1
             TNR += (confidence_score < threshold).sum().item() / ood_test_loader.batch_size
+            
         print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
 
 def mahalanobis_score(feature, mu, cov, return_all=False):
@@ -160,6 +151,8 @@ def obtain_statistics(feature, y):
     return mu, cov
 
 
+
+
 def id_classification_test(model, id_train_loader, id_test_loader, args):
     """
     TODO : Calculate test accuracy of CIFAR-10 test set by using Mahalanobis classification method 
@@ -181,7 +174,7 @@ def id_classification_test(model, id_train_loader, id_test_loader, args):
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
             y_all.append(y)
-            feature2d = feature_list[-1]
+            feature2d = feature_list[feature_idx]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             feature_all.append(feature)
         y_all = torch.cat(y_all, dim=0)
@@ -193,7 +186,7 @@ def id_classification_test(model, id_train_loader, id_test_loader, args):
         for x, y in id_test_loader:
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
-            feature2d = feature_list[-1]
+            feature2d = feature_list[feature_idx]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             confidence_score, all_score = mahalanobis_score(feature, mu, cov, return_all=True)
             y_pred = torch.max(all_score, dim=1)[1]
