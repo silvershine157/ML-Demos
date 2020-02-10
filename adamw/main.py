@@ -14,8 +14,7 @@ def test1():
 	batch_size = 128
 
 	transform = transforms.Compose([
-		transforms.ToTensor(),
-		transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+		transforms.ToTensor()
 	])
 	trainset = torchvision.datasets.CIFAR100(root='./data', train=True,
 	                                        download=True, transform=transform)
