@@ -48,6 +48,8 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
 
     limit = 10 # TODO: remove this
     with torch.no_grad():
+
+        # get statistics
         y_all = []
         feature_all = []
         for x, y in id_train_loader:
@@ -61,9 +63,36 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
             feature2d = feature_list[-1]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
             feature_all.append(feature)
-    y_all = torch.cat(y_all, dim=0)
-    feature_all = torch.cat(feature_all, dim=0)
-    mu, cov = obtain_statistics(feature_all, y_all)
+        y_all = torch.cat(y_all, dim=0)
+        feature_all = torch.cat(feature_all, dim=0)
+        mu, cov = obtain_statistics(feature_all, y_all)
+
+        # in-distribution test
+        for x, y in id_test_loader:
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            feature2d = feature_list[-1]
+            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+            confidence_score = mahalanobis_score(feature, mu, cov)
+            
+            break
+
+        # out-of-distribution test
+
+
+def mahalanobis_score(feature, mu, cov):
+    '''
+    feature: [B, D]
+    mu: [C, D]
+    cov: [D, D]
+    ---
+    confidence_score: [B]
+    '''
+    all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
+    inv_cov = cov.inverse()
+    all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, inv_cov, all_dev) # [B, C]
+    confidence_score = torch.max(all_score, dim=1)[0]
+    return confidence_score
 
 
 def obtain_statistics(feature, y):
