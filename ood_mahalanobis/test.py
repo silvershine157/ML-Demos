@@ -35,9 +35,99 @@ def ood_test_baseline(model, id_train_loader, id_test_loader, ood_test_loader, a
         
     print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))
             
-feature_idx = -3
+feature_idx = -1
+
+def obtain_train_stats(model, id_train_loader):
+
+    model = model.cuda()
+    model.eval()
+
+    # collect features for all layers
+    y_all = []
+    n_features = 5
+    feature_all = [[] for _ in range(n_features)]
+    with torch.no_grad():
+        for x, y in id_train_loader:
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            y_all.append(y)
+            for i in range(n_features):
+                feature2d = feature_list[i]
+                feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+                feature_all[i].append(feature)
+
+    # calculate class mean and tied covariance for each layer
+    y_all = torch.cat(y_all, dim=0)
+    stats = []
+    for i in range(n_features):
+        feature_i = torch.cat(feature_all[i], dim=0)
+        mu_i, cov_i = obtain_statistics(feature_i, y_all)
+        stats.append((mu_i, cov_i))
+
+    return stats
+
+
+def obtain_test_scores(model, stats, test_loader):
+
+    model = model.cuda()
+    model.eval()
+
+    # calculate scores for each batch
+    n_features = 5
+    test_scores_list = [[] for i in range(n_features)]
+    with torch.no_grad():
+        for x, y in test_loader:
+            x, y = x.cuda(), y.cuda()
+            pred, feature_list = model(x)
+            for i in range(n_features):
+                feature2d = feature_list[i]
+                feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
+                mu, cov = stats[i]
+                confidence_score = mahalanobis_score(feature, mu, cov)
+                test_scores_list[i].append(confidence_score)
+
+    # concatenate batches
+    test_scores = []
+    for i in range(n_features):
+        test_scores.append(torch.cat(test_scores_list[i], dim=0))
+
+    return test_scores
+
 
 def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader, args):
+
+    calculate_stat = False
+    if calculate_stat:
+        stats = obtain_train_stats(model, id_train_loader)
+        torch.save(stats, 'data/stats')
+    else:
+        stats = torch.load('data/stats')
+
+    calculate_scores = False
+    if calculate_scores:
+        id_scores = obtain_test_scores(model, stats, id_test_loader)
+        ood_scores = obtain_test_scores(model, stats, ood_test_loader)
+        torch.save(id_scores, 'data/id_scores')
+        torch.save(ood_scores, 'data/ood_scores')
+    else:
+        id_scores = torch.load('data/id_scores')
+        ood_scores = torch.load('data/ood_scores')
+
+    process_scores(id_scores, ood_scores)
+
+
+def process_scores(id_scores, ood_scores):
+    n_features = len(id_scores)
+    id_scores = torch.stack(id_scores).t()
+    ood_scores = torch.stack(ood_scores).t()
+    
+
+
+def evaluate_mahalanobis(all_scores):
+    pass
+
+
+def old_ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader, args):
     """
     TODO
     - step 1. calculate empircal mean and covariance of each of class conditional Gaussian distibtuion(CIFAR10 has 10 classes) 
@@ -49,11 +139,7 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
     model = model.cuda()
     model.eval()
 
-    
-
-     
     with torch.no_grad():
-
         # get statistics
         y_all = []
         feature_all = []
@@ -75,7 +161,7 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
 
         TPR = 0.
         TNR = 0.
-        threshold = -210
+        threshold = -1600
 
         invert = False
         if invert: threshold *= -1
@@ -109,6 +195,7 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
             
         print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
 
+
 def mahalanobis_score(feature, mu, cov, return_all=False):
     '''
     feature: [B, D]
@@ -118,6 +205,7 @@ def mahalanobis_score(feature, mu, cov, return_all=False):
     confidence_score: [B]
     '''
     all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
+    cov = cov + 0.0001*torch.eye(cov.size(0)).cuda()
     all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
     confidence_score = torch.max(all_score, dim=1)[0]
     if return_all:
@@ -211,8 +299,8 @@ if __name__ == "__main__":
         parser.add_argument('--alg', type=str, default='mahalanobis', help='baseline | mahalanobis')
         
 
-        parser.add_argument('--train_bs', type=int, default=1000, help='Batch size of in_trainloader.')   
-        parser.add_argument('--test_bs', type=int, default=1000, help='Batch size of in_testloader and out_testloader.')   
+        parser.add_argument('--train_bs', type=int, default=100, help='Batch size of in_trainloader.')   
+        parser.add_argument('--test_bs', type=int, default=100, help='Batch size of in_testloader and out_testloader.')   
         parser.add_argument('--threshold', type=int, default=8, help='Threshold.')   
         parser.add_argument('--num_workers', type=int, default=0)
 
@@ -259,7 +347,8 @@ if __name__ == "__main__":
     
     # load model trained on CIFAR-10 
     model = ResNet34()
-    model.load_state_dict(torch.load('./data/resnet34-31.pth'))
+    #model.load_state_dict(torch.load('./data/resnet34-31.pth'))
+    model.load_state_dict(torch.load('./data/resnet_cifar10.pth'))
 
     # ood dectection test
     if args.task == 'ood_detection':
