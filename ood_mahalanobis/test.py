@@ -113,7 +113,9 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         id_scores = torch.load('data/id_scores')
         ood_scores = torch.load('data/ood_scores')
 
-    #logistic_regression(id_scores, ood_scores)
+    do_logistic_regression = False
+    if do_logistic_regression:
+        logistic_regression(id_scores, ood_scores)
     process_scores(id_scores, ood_scores)
 
 
@@ -142,8 +144,7 @@ def process_scores(id_scores, ood_scores):
     TPR = TP/id_conf.size(0)
     TN = (ood_conf < threshold).sum().item()
     TNR = TN/ood_conf.size(0)
-    print(TPR)
-    print(TNR)
+    print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR*100, TNR*100, threshold))
 
 
 class LogisticReg(torch.nn.Module):
@@ -155,6 +156,7 @@ class LogisticReg(torch.nn.Module):
         logits = self.linear(x)
         pred = 1.0/(1.0+torch.exp(-logits))
         return pred
+
 
 def logistic_regression(id_scores, ood_scores):
     n_features = len(id_scores)
@@ -176,80 +178,9 @@ def logistic_regression(id_scores, ood_scores):
         print(loss.item())
     print(model.linear.weight)
 
-def evaluate_mahalanobis(all_scores):
-    pass
 
 
-def old_ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader, args):
-    """
-    TODO
-    - step 1. calculate empircal mean and covariance of each of class conditional Gaussian distibtuion(CIFAR10 has 10 classes) 
-        - If you don't use feature ensemble, performance will be degenerated, but whether to use it is up to you.
-        - If you don't use input pre-processing, performance will be degenerated, but whether to use it is up to you.
-    - stpe 2. calculate test samples' confidence score by using Mahalanobis distance and just calculated parameters of class conditional Gaussian distributions
-    - step 3. compare the confidence score and the threshold. if confidence score > threshold, it will be assigned to in-distribtuion sample.
-    """
-    model = model.cuda()
-    model.eval()
-
-    with torch.no_grad():
-        # get statistics
-        y_all = []
-        feature_all = []
-        limit = 1000 # TODO: remove this
-        for x, y in id_train_loader:
-            if limit <= 0:
-                break
-            else:
-                limit -= 1
-            x, y = x.cuda(), y.cuda()
-            pred, feature_list = model(x)
-            y_all.append(y)
-            feature2d = feature_list[feature_idx]
-            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-            feature_all.append(feature)
-        y_all = torch.cat(y_all, dim=0)
-        feature_all = torch.cat(feature_all, dim=0)
-        mu, cov = obtain_statistics(feature_all, y_all)
-
-        TPR = 0.
-        TNR = 0.
-        threshold = -1600
-
-        invert = False
-        if invert: threshold *= -1
-        print("ID test")
-        # in-distribution test
-        for x, y in id_test_loader:
-            x, y = x.cuda(), y.cuda()
-            pred, feature_list = model(x)
-            feature2d = feature_list[feature_idx]
-            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-            confidence_score = mahalanobis_score(feature, mu, cov)
-            print(confidence_score.mean())
-            if invert: confidence_score *= -1
-            TPR += (confidence_score > threshold).sum().item() / id_test_loader.batch_size
-            
-        print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
-
-        
-
-        print("OOD test")
-        # out-of-distribution test
-        for x, y in ood_test_loader:
-            x, y = x.cuda(), y.cuda()
-            pred, feature_list = model(x)
-            feature2d = feature_list[feature_idx]
-            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-            confidence_score = mahalanobis_score(feature, mu, cov)
-            print(confidence_score.mean())
-            if invert: confidence_score *= -1
-            TNR += (confidence_score < threshold).sum().item() / ood_test_loader.batch_size
-            
-        print('TPR: {:.4}% |TNP: {:.4}% |threshold: {}'.format(TPR / len(id_test_loader) * 100, TNR / len(ood_test_loader) * 100, threshold))            
-
-
-def mahalanobis_score(feature, mu, cov, return_all=False):
+def mahalanobis_score(feature, mu, cov):
     '''
     feature: [B, D]
     mu: [C, D]
@@ -260,8 +191,6 @@ def mahalanobis_score(feature, mu, cov, return_all=False):
     all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
     all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
     confidence_score = torch.max(all_score, dim=1)[0]
-    if return_all:
-        return confidence_score, all_score
     return confidence_score
 
 
@@ -306,12 +235,7 @@ def id_classification_test(model, id_train_loader, id_test_loader, args):
         # get statistics
         y_all = []
         feature_all = []
-        limit = 1000 # TODO: remove this
         for x, y in id_train_loader:
-            if limit <= 0:
-                break
-            else:
-                limit -= 1
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
             y_all.append(y)
