@@ -113,15 +113,68 @@ def ood_test_mahalanobis(model, id_train_loader, id_test_loader, ood_test_loader
         id_scores = torch.load('data/id_scores')
         ood_scores = torch.load('data/ood_scores')
 
+    #logistic_regression(id_scores, ood_scores)
     process_scores(id_scores, ood_scores)
 
 
 def process_scores(id_scores, ood_scores):
+
     n_features = len(id_scores)
     id_scores = torch.stack(id_scores).t()
     ood_scores = torch.stack(ood_scores).t()
-    
 
+    method = 'logistic'
+    if method == 'last':
+        id_conf = id_scores[:, -1]
+        ood_conf = ood_scores[:, -1]
+        threshold = -1500
+    elif method == 'mean':
+        id_conf = id_scores.mean(dim=1)
+        ood_conf = ood_scores.mean(dim=1)
+        threshold = -400
+    elif method == 'logistic':
+        weights = torch.Tensor([-1.9344, -1.3672,  3.9768,  0.1706,  0.2704]).cuda().view(1, 5)
+        id_conf = (weights * id_scores).mean(dim=1)
+        ood_conf = (weights * ood_scores).mean(dim=1)
+        threshold = -190
+
+    TP = (id_conf > threshold).sum().item()
+    TPR = TP/id_conf.size(0)
+    TN = (ood_conf < threshold).sum().item()
+    TNR = TN/ood_conf.size(0)
+    print(TPR)
+    print(TNR)
+
+
+class LogisticReg(torch.nn.Module):
+    def __init__(self):
+        super(LogisticReg, self).__init__()
+        self.linear = torch.nn.Linear(5, 1)
+
+    def forward(self, x):
+        logits = self.linear(x)
+        pred = 1.0/(1.0+torch.exp(-logits))
+        return pred
+
+def logistic_regression(id_scores, ood_scores):
+    n_features = len(id_scores)
+    id_scores = torch.stack(id_scores).t()/100
+    ood_scores = torch.stack(ood_scores).t()/100
+    eps = 1E-6
+    model = LogisticReg().cuda()
+    model = model.train()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    for epoch in range(10000):
+        optimizer.zero_grad()
+        id_pred = model(id_scores)
+        ood_pred = model(ood_scores)
+        #print(id_pred)
+        #print(ood_pred)
+        loss = -torch.log(id_pred+eps).mean()-torch.log(1.0-ood_pred+eps).mean()
+        loss.backward()
+        optimizer.step()
+        print(loss.item())
+    print(model.linear.weight)
 
 def evaluate_mahalanobis(all_scores):
     pass
@@ -205,7 +258,6 @@ def mahalanobis_score(feature, mu, cov, return_all=False):
     confidence_score: [B]
     '''
     all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
-    cov = cov + 0.0001*torch.eye(cov.size(0)).cuda()
     all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
     confidence_score = torch.max(all_score, dim=1)[0]
     if return_all:
@@ -235,6 +287,7 @@ def obtain_statistics(feature, y):
         dev = feature[b, :] - mu[y[b], :]
         cov_sum += torch.einsum('i,j->ij', dev, dev)
     cov = cov_sum/B
+    cov = cov + 0.000001*torch.eye(cov.size(0)).cuda()
 
     return mu, cov
 
