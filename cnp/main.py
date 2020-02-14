@@ -29,9 +29,7 @@ def main(args):
     y_dim = 1
     r_dim = 128  #128
 
-    encoder = Encoder(x_dim, y_dim, r_dim).to(device)
-    decoder = Decoder(x_dim, r_dim, y_dim).to(device)
-    net = CNPs(encoder=encoder, decoder=decoder).to(device)
+    net = CNP(x_dim, y_dim, r_dim).to(device)
 
     optimizer = torch.optim.AdamW(net.parameters(), lr = lr) #0.01 and 10000 epochs!
     
