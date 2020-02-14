@@ -83,7 +83,7 @@ def obtain_test_scores(model, stats, test_loader):
                 feature2d = feature_list[i]
                 feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
                 mu, cov = stats[i]
-                confidence_score = mahalanobis_score(feature, mu, cov)
+                confidence_score, _ = mahalanobis_score(feature, mu, cov)
                 test_scores_list[i].append(confidence_score)
 
     # concatenate batches
@@ -170,8 +170,6 @@ def logistic_regression(id_scores, ood_scores):
         optimizer.zero_grad()
         id_pred = model(id_scores)
         ood_pred = model(ood_scores)
-        #print(id_pred)
-        #print(ood_pred)
         loss = -torch.log(id_pred+eps).mean()-torch.log(1.0-ood_pred+eps).mean()
         loss.backward()
         optimizer.step()
@@ -189,9 +187,9 @@ def mahalanobis_score(feature, mu, cov):
     confidence_score: [B]
     '''
     all_dev = feature.unsqueeze(dim=1) - mu.unsqueeze(dim=0) # [B, C, D]
-    all_score = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
-    confidence_score = torch.max(all_score, dim=1)[0]
-    return confidence_score
+    all_scores = -torch.einsum('bci,ij,bcj->bc', all_dev, cov.inverse(), all_dev)
+    confidence_score = torch.max(all_scores, dim=1)[0]
+    return confidence_score, all_scores
 
 
 def obtain_statistics(feature, y):
@@ -220,45 +218,34 @@ def obtain_statistics(feature, y):
 
     return mu, cov
 
-
-
-
 def id_classification_test(model, id_train_loader, id_test_loader, args):
-    """
-    TODO : Calculate test accuracy of CIFAR-10 test set by using Mahalanobis classification method 
-    """
+    calculate_stat = False
+    if calculate_stat:
+        stats = obtain_train_stats(model, id_train_loader)
+        torch.save(stats, 'data/stats')
+    else:
+        stats = torch.load('data/stats')
 
     model = model.cuda()
     model.eval()
+    n_correct = 0
+    n_all = 0
+    sm_correct = 0
+    mu, cov = stats[-1]
     with torch.no_grad():
-
-        # get statistics
-        y_all = []
-        feature_all = []
-        for x, y in id_train_loader:
-            x, y = x.cuda(), y.cuda()
-            pred, feature_list = model(x)
-            y_all.append(y)
-            feature2d = feature_list[feature_idx]
-            feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-            feature_all.append(feature)
-        y_all = torch.cat(y_all, dim=0)
-        feature_all = torch.cat(feature_all, dim=0)
-        mu, cov = obtain_statistics(feature_all, y_all)
-
-        n_correct = 0
-        n_all = 0
         for x, y in id_test_loader:
             x, y = x.cuda(), y.cuda()
             pred, feature_list = model(x)
-            feature2d = feature_list[feature_idx]
+            feature2d = feature_list[-1]
             feature = torch.mean(torch.mean(feature2d, dim=3), dim=2)
-            confidence_score, all_score = mahalanobis_score(feature, mu, cov, return_all=True)
-            y_pred = torch.max(all_score, dim=1)[1]
+            confidence_score, all_scores = mahalanobis_score(feature, mu, cov)
+            y_pred = torch.max(all_scores, dim=1)[1]
+            sm_pred = torch.max(pred, dim=1)[1]
             n_correct += torch.sum(y == y_pred).cpu().item()
+            sm_correct += torch.sum(y == sm_pred).cpu().item()
             n_all += x.size(0)
         print(n_correct/n_all)
-        
+        print(sm_correct/n_all)
     pass
 
 
