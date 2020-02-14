@@ -12,13 +12,13 @@ class CNP(nn.Module):
         self.encoder = Encoder(x_dim, y_dim, r_dim)
         self.decoder = Decoder(x_dim, r_dim, out_dim)
 
-    def forward(self, x_obs, y_obs, x_tst):
+    def forward(self, x_obs, y_obs, x_tar):
         '''
-        x_obs: [B, O, x_dim]
-        y_obs: [B, O, y_dim]
-        x_tst: [B, T, x_dim]
+        x_obs: [B, N, x_dim]
+        y_obs: [B, N, y_dim]
+        x_tar: [B, M, x_dim]
         ---
-        out: [B, T, out_dim] # distr. params for p(y_tst | (x_obs, y_obs), x_tst)
+        out: [B, M, out_dim] # distr. params for p(y_tar | (x_obs, y_obs), x_tar)
         '''
         r_all = self.encoder(x_obs, y_obs)
         r = torch.mean(r_all, dim=1) # aggregation
@@ -38,10 +38,10 @@ class Encoder(nn.Module):
 
     def forward(self, x, y):
         '''
-        x: [B, O, x_dim]
-        y: [B, O, y_dim]
+        x: [B, N, x_dim]
+        y: [B, N, y_dim]
         ---
-        r_all: [B, O, r_dim]
+        r_all: [B, N, r_dim]
         '''
         xy = torch.cat([x, y], dim=2)
         r_all = self.layers(xy)
@@ -60,12 +60,12 @@ class Decoder(nn.Module):
 
     def forward(self, x, r):
         '''
-        x: [B, T, x_dim]
+        x: [B, M, x_dim]
         r: [B, r_dim]
         ---
-        out: [B, T, out_dim]
+        out: [B, M, out_dim]
         '''
-        r_expand = r.unsqueeze(dim=1).expand(-1, x.size(1), -1) # [B, T, r_dim]
+        r_expand = r.unsqueeze(dim=1).expand(-1, x.size(1), -1) # [B, M, r_dim]
         xr = torch.cat(x, r_expand, dim=2)
         out = self.layers(xr)
         return out

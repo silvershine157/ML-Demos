@@ -40,7 +40,10 @@ def main(args):
         
         # TODO -- Train model
         
-
+        # sample GP curve O (fixed n, sample x, calculate kernel matrix, sample y)
+        # sample N
+        # sample B different subsets of size N from O
+        # now we have [B, N, x_dim] and [B, N, y_dim]
 
         # -------
 
