@@ -12,7 +12,7 @@ def sample_gp(n, rbf_param=3.0):
     y: [n, 1]
     '''
     x = 2.0*torch.randn(n, 1).to(device)
-    #x = torch.linspace(-2., 2., n).view(n, 1)
+    #x = torch.linspace(-3., 3., n).view(n, 1).to(device)
     # construct RBF kernel matrix
     D = x - x.t()
     cov = torch.exp(-D**2/rbf_param)+0.0001*torch.eye(n).to(device)
@@ -70,17 +70,18 @@ def get_gaussian_params(out):
 def test2():
 
 	n = 50
-	B = 3
+	B = 32
 	x_dim = 1
 	y_dim = 1
 	out_dim = 2
-	r_dim = 128
+	r_dim = 64
 	net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
 	running_loss = 0.0
 	running_cnt = 0
-	for _ in range(10000):
+
+	for _ in range(100000):
 
 		optimizer.zero_grad()
 		x_obs, y_obs, x_tar, y_tar = sample_gp_task(n, B)
@@ -92,13 +93,13 @@ def test2():
 
 		running_loss += loss.item()
 		running_cnt += 1
-		if running_cnt == 500:
+		if running_cnt == 1000:
 			print(running_loss/running_cnt)
 			running_loss = 0.0
 			running_cnt = 0	
 
 	with torch.no_grad():
-		for _ in range(10):
+		for _ in range(20):
 			x_obs, y_obs, x_tar, y_tar = sample_gp_task(n, 1)
 			out = net(x_obs, y_obs, x_tar)
 			mean, var = get_gaussian_params(out)
@@ -134,54 +135,6 @@ def plot_result(x_obs, y_obs, x_tar, y_tar, mean, var):
 
 	plt.legend()
 	plt.show()
-
-def test1():
-	n = 50
-	x_dim = 1
-	y_dim = 1
-	out_dim = 2 # mean and var
-	r_dim = 128  #128
-
-	net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
-	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-	for _ in range(10000):
-
-		x_all, y_all = sample_gp(n)
-		x_obs, y_obs = sample_obs(x_all, y_all, B=1, N=5)
-		x_all = x_all.view(1, -1, 1).to(device)
-		y_all = y_all.view(1, -1, 1).to(device)
-		x_obs = x_obs.view(1, -1, 1).to(device)
-		y_obs = y_obs.view(1, -1, 1).to(device)
-
-		optimizer.zero_grad()
-		out = net(x_obs, y_obs, x_all)
-		mean = out[:, :, 0].unsqueeze(dim=2)
-		var = torch.exp(out[:, :, 1]).unsqueeze(dim=2)
-		loss = NLLloss(y_all, mean, var)
-
-		loss.backward()
-		optimizer.step()
-		print(loss.item())
-
-	with torch.no_grad():
-		for _ in range(10):
-			x_all, y_all = sample_gp(n)
-			x_obs, y_obs = sample_obs(x_all, y_all, B=1, N=5)
-			x_all = x_all.view(1, -1, 1).to(device)
-			y_all = y_all.view(1, -1, 1).to(device)
-			x_obs = x_obs.view(1, -1, 1).to(device)
-			y_obs = y_obs.view(1, -1, 1).to(device)
-			mean = net(x_obs, y_obs, x_all)[:, :, 0]
-			var = torch.exp(out[:, :, 1])
-
-			plt.scatter(x_all.squeeze().cpu(), y_all.squeeze().cpu(), label='tar')
-			plt.scatter(x_all.squeeze().cpu(), mean.squeeze().cpu(), label='mean')
-			plt.scatter(x_all.squeeze().cpu(), var.squeeze().cpu(), label='var')
-			plt.scatter(x_obs.squeeze().cpu(), y_obs.squeeze().cpu(), label='obs')
-			plt.legend()
-			plt.show()
-
-
 
 
 
