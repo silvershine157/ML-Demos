@@ -1,6 +1,6 @@
 from model import *
 from data import *
-
+import numpy as np
 import argparse
 
 #from torchviz import make_dot
@@ -23,6 +23,18 @@ def sample_gp(n):
     mvn = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(n), K)
     y = mvn.sample().view(n, 1)
     return x, y
+
+def sample_obs(x_all, y_all, B, N):
+    x_all = x_all.view(-1)
+    y_all = y_all.view(-1)
+    x_obs = torch.zeros(B, N, device=device)
+    y_obs = torch.zeros(B, N, device=device)
+    for b in range(B):
+        p = torch.randperm(x_all.size(0))
+        idx = p[:N]
+        x_obs[b, :] = x_all[idx]
+        y_obs[b, :] = y_all[idx]
+    return x_obs, y_obs
 
 
 def main(args):
@@ -57,6 +69,11 @@ def main(args):
         # TODO -- Train model
         
         # sample GP curve O (fixed n, sample x, calculate kernel matrix, sample y)
+        n = 20
+        x_all, y_all = sample_gp(n)
+        x_all, y_all = x_all.to(device), y_all.to(device)
+        N = np.random.randint(low=1, high=n)
+        sample_obs(x_all, y_all, N)
         # sample N
         # sample B different subsets of size N from O
         # now we have [B, N, x_dim] and [B, N, y_dim]
