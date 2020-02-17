@@ -70,7 +70,7 @@ def main(args):
     net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
 
     #optimizer = torch.optim.AdamW(net.parameters(), lr = lr) #0.01 and 10000 epochs!
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
     # --------- TRAIN --------- 
     running_loss = 0.0

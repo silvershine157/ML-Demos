@@ -11,8 +11,8 @@ def sample_gp(n, rbf_param=3.0):
     x: [n, 1]
     y: [n, 1]
     '''
-    x = 2.0*torch.randn(n, 1).to(device)
-    #x = torch.linspace(-3., 3., n).view(n, 1).to(device)
+    #x = 2.0*torch.randn(n, 1).to(device)
+    x = torch.linspace(-3., 3., n).view(n, 1).to(device)
     # construct RBF kernel matrix
     D = x - x.t()
     cov = torch.exp(-D**2/rbf_param)+0.0001*torch.eye(n).to(device)
@@ -47,7 +47,7 @@ def sample_gp_task(n, B):
 	x_tar: [B, n, 1]
 	y_tar: [B, n, 1]
 	'''
-	x_all, y_all = sample_gp(n, rbf_param=10.0)
+	x_all, y_all = sample_gp(n, rbf_param=1.)
 	N = np.random.randint(low=1, high=n)
 	x_obs, y_obs = sample_obs(x_all, y_all, B, N)
 	x_tar = x_all.unsqueeze(dim=0).expand(B, -1, -1)
@@ -63,18 +63,19 @@ def get_gaussian_params(out):
 	var: [B, n, 1]
 	'''
 	mean = out[:, :, 0].unsqueeze(dim=2)
-	var = torch.exp(out[:, :, 1]).unsqueeze(dim=2)
+	#var = torch.exp(out[:, :, 1]).unsqueeze(dim=2)
+	var = torch.log(torch.exp(out[:, :, 1])+1.0).unsqueeze(dim=2)
 	return mean, var
 
 
 def test2():
 
-	n = 50
+	n = 30
 	B = 32
 	x_dim = 1
 	y_dim = 1
 	out_dim = 2
-	r_dim = 64
+	r_dim = 128
 	net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 

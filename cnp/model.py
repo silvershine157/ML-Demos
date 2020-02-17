@@ -29,7 +29,7 @@ class CNP(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, x_dim, y_dim, r_dim):
         super(Encoder, self).__init__()
-        h_dim = 100
+        h_dim = 128
         self.layers = nn.Sequential(
             nn.Linear(x_dim+y_dim, h_dim),
             nn.ReLU(),
@@ -53,9 +53,13 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, x_dim, r_dim, out_dim):
         super(Decoder, self).__init__()
-        h_dim = 100
+        h_dim = 128
         self.layers = nn.Sequential(
             nn.Linear(x_dim+r_dim, h_dim),
+            nn.ReLU(),
+            nn.Linear(h_dim, h_dim),
+            nn.ReLU(),
+            nn.Linear(h_dim, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, h_dim),
             nn.ReLU(),
