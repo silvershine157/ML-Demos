@@ -25,15 +25,20 @@ def sample_gp(n):
     return x, y
 
 def sample_obs(x_all, y_all, B, N):
-    x_all = x_all.view(-1)
-    y_all = y_all.view(-1)
-    x_obs = torch.zeros(B, N, device=device)
-    y_obs = torch.zeros(B, N, device=device)
+    '''
+    x_all: [n, x_dim]
+    y_all: [n, y_dim]
+    ---
+    x_obs: [B, N, x_dim]
+    y_obs: [B, N, y_dim]
+    '''
+    x_obs = torch.zeros(B, N, x_all.size(1), device=device)
+    y_obs = torch.zeros(B, N, y_all.size(1), device=device)
     for b in range(B):
         p = torch.randperm(x_all.size(0))
         idx = p[:N]
-        x_obs[b, :] = x_all[idx]
-        y_obs[b, :] = y_all[idx]
+        x_obs[b, :, :] = x_all[idx, :]
+        y_obs[b, :, :] = y_all[idx, :]
     return x_obs, y_obs
 
 
@@ -54,36 +59,33 @@ def main(args):
     # --------- MODEL --------- 
     x_dim = 1
     y_dim = 1
+    out_dim = 2 # mean and var
     r_dim = 128  #128
 
-    net = CNP(x_dim, y_dim, r_dim).to(device)
+    net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
 
     optimizer = torch.optim.AdamW(net.parameters(), lr = lr) #0.01 and 10000 epochs!
 
 
     # --------- TRAIN --------- 
     for epoch in range(epochs):
-        nll_loss =  0.0
         optimizer.zero_grad()
         
-        # TODO -- Train model
-        
-        # sample GP curve O (fixed n, sample x, calculate kernel matrix, sample y)
         n = 20
+        B = 32
         x_all, y_all = sample_gp(n)
         x_all, y_all = x_all.to(device), y_all.to(device)
         N = np.random.randint(low=1, high=n)
-        sample_obs(x_all, y_all, N)
-        # sample N
-        # sample B different subsets of size N from O
-        # now we have [B, N, x_dim] and [B, N, y_dim]
-
-        # -------
+        x_obs, y_obs = sample_obs(x_all, y_all, B, N) # [B, N, x_dim], [B, N, y_dim]
+        x_tar = x_all.unsqueeze(dim=0).expand(B, -1, -1) # [B, n, x_dim]
+        y_tar = y_all.unsqueeze(dim=0).expand(B, -1, -1) # [B, n, y_dim]
+        out = net(x_obs, y_obs, x_tar) # [B, n, out_dim]
+        mean = out[:, :, 0]
+        var = torch.exp(out[:, :, 1])
+        nll_loss = NLLloss(y_tar.unsqueeze(dim=2), mean, var)
 
         if epoch % print_step == 0:
             print('Epoch', epoch, ': nll loss', nll_loss.item())
-        #dot = make_dot(mean)
-        #dot.render("model.png")
 
         nll_loss.backward()
         optimizer.step()
@@ -92,7 +94,7 @@ def main(args):
     result_mean, result_var = None, None
     
     # TODO -- Calculate result_mean and result_var using your model
-
+    
 
     # -------
 

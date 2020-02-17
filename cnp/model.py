@@ -22,7 +22,7 @@ class CNP(nn.Module):
         '''
         r_all = self.encoder(x_obs, y_obs)
         r = torch.mean(r_all, dim=1) # aggregation
-        out = self.decoder(x_tst, r)
+        out = self.decoder(x_tar, r)
         return out
 
 
@@ -66,6 +66,6 @@ class Decoder(nn.Module):
         out: [B, M, out_dim]
         '''
         r_expand = r.unsqueeze(dim=1).expand(-1, x.size(1), -1) # [B, M, r_dim]
-        xr = torch.cat(x, r_expand, dim=2)
+        xr = torch.cat([x, r_expand], dim=2)
         out = self.layers(xr)
         return out
