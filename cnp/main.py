@@ -11,10 +11,25 @@ np.random.seed(SEED)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
+def sample_gp(n):
+    '''
+    x: [n, 1]
+    y: [n, 1]
+    '''
+    x = 2.0*torch.randn(n, 1)
+    # construct RBF kernel matrix
+    D = x - x.t()
+    K = torch.exp(-D**2/1.0)+0.0001*torch.eye(n)
+    mvn = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(n), K)
+    y = mvn.sample().view(n, 1)
+    return x, y
+
+
 def main(args):
     x_train , y_train, x_test, y_test = generate_data()
     x_torch , y_torch = torch.Tensor(x_train).to(device), torch.Tensor(y_train).to(device)
     
+
     # --------- ARGS --------- 
     epochs = args.epochs
     batch_size = args.batch_size
@@ -32,7 +47,8 @@ def main(args):
     net = CNP(x_dim, y_dim, r_dim).to(device)
 
     optimizer = torch.optim.AdamW(net.parameters(), lr = lr) #0.01 and 10000 epochs!
-    
+
+
     # --------- TRAIN --------- 
     for epoch in range(epochs):
         nll_loss =  0.0
