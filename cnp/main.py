@@ -21,8 +21,9 @@ def sample_gp(n):
     D = x - x.t()
     K = torch.exp(-D**2/1.0)+0.0001*torch.eye(n)
     mvn = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(n), K)
-    y = mvn.sample().view(n, 1)
+    y = 3*mvn.sample().view(n, 1)
     return x, y
+
 
 def sample_obs(x_all, y_all, B, N):
     '''
@@ -68,14 +69,15 @@ def main(args):
 
     net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
 
-    optimizer = torch.optim.AdamW(net.parameters(), lr = lr) #0.01 and 10000 epochs!
-
+    #optimizer = torch.optim.AdamW(net.parameters(), lr = lr) #0.01 and 10000 epochs!
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
 
     # --------- TRAIN --------- 
+    running_loss = 0.0
     for epoch in range(epochs):
         optimizer.zero_grad()
         
-        n = 50
+        n = 100
         B = batch_size
         x_all, y_all = sample_gp(n)
         x_all, y_all = x_all.to(device), y_all.to(device)
@@ -87,12 +89,16 @@ def main(args):
         mean = out[:, :, 0]
         var = torch.exp(out[:, :, 1])
         nll_loss = NLLloss(y_tar.unsqueeze(dim=2), mean, var)
-
-        if epoch % print_step == 0:
-            print('Epoch', epoch, ': nll loss', nll_loss.item())
-
         nll_loss.backward()
         optimizer.step()
+
+        running_loss += nll_loss.item()
+
+        if epoch % print_step == 0:
+            print('Epoch', epoch, ': avg loss', running_loss/print_step)
+            running_loss = 0.0
+
+  
 
     print("final loss : nll loss", nll_loss.item())
     result_mean, result_var = None, None
@@ -109,9 +115,20 @@ def main(args):
     result_mean = mean.squeeze().cpu().numpy()
     result_var = var.squeeze().cpu().numpy()
 
+    print(result_mean)
+    print(result_var)
+
     # -------
 
     draw_graph(x_test, y_test, x_train, y_train, result_mean, np.sqrt(result_var))
+
+
+def test_gp():
+    print("testing")
+    n = 30
+    x_all, y_all = sample_gp(n)
+    plt.scatter(x_all, y_all)
+    plt.show()
 
 
 if __name__ == '__main__':

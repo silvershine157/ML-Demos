@@ -33,6 +33,8 @@ class Encoder(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(x_dim+y_dim, h_dim),
             nn.ReLU(),
+            nn.Linear(h_dim, h_dim),
+            nn.ReLU(),
             nn.Linear(h_dim, r_dim)
         )
 
@@ -54,6 +56,8 @@ class Decoder(nn.Module):
         h_dim = 100
         self.layers = nn.Sequential(
             nn.Linear(x_dim+r_dim, h_dim),
+            nn.ReLU(),
+            nn.Linear(h_dim, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, out_dim)
         )

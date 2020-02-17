@@ -10,7 +10,7 @@ def generate_data(num_data=20, x_range=(-3,3), std=3.):
     y_train = [[x[0]**3 +np.random.normal(0,std)] for x in x_train]
 
     # test data
-    x_test = np.linspace(-6,6,100).reshape(100,1) # test data for regression
+    x_test = np.linspace(-4,4,100).reshape(100,1) # test data for regression
     y_test = x_test**3
 
     return x_train ,y_train, x_test, y_test
