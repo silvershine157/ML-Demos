@@ -46,6 +46,10 @@ def main(args):
     x_train , y_train, x_test, y_test = generate_data()
     x_torch , y_torch = torch.Tensor(x_train).to(device), torch.Tensor(y_train).to(device)
     
+    print(torch.Tensor(x_train).shape)
+    print(torch.Tensor(y_train).shape)
+    print(torch.Tensor(x_test).shape)
+    print(torch.Tensor(y_test).shape)
 
     # --------- ARGS --------- 
     epochs = args.epochs
@@ -71,8 +75,8 @@ def main(args):
     for epoch in range(epochs):
         optimizer.zero_grad()
         
-        n = 20
-        B = 32
+        n = 50
+        B = batch_size
         x_all, y_all = sample_gp(n)
         x_all, y_all = x_all.to(device), y_all.to(device)
         N = np.random.randint(low=1, high=n)
@@ -94,7 +98,16 @@ def main(args):
     result_mean, result_var = None, None
     
     # TODO -- Calculate result_mean and result_var using your model
-    
+    with torch.no_grad():
+        x_train_ = torch.Tensor(x_train).view(1, -1, 1).to(device) # [1, N, 1]
+        y_train_ = torch.Tensor(y_train).view(1, -1, 1).to(device) # [1, N, 1]
+        x_test_ = torch.Tensor(x_test).view(1, -1, 1).to(device) # [1, n, 1]
+        out = net(x_train_, y_train_, x_test_) # [1, n, 2]
+        mean = out[:, :, 0]
+        var = torch.exp(out[:, :, 1])
+
+    result_mean = mean.squeeze().cpu().numpy()
+    result_var = var.squeeze().cpu().numpy()
 
     # -------
 

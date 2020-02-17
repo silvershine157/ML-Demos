@@ -23,5 +23,5 @@ def draw_graph(x,y,x_set,y_set,mean_predict,std): # x-s
     plt.fill_between(x.reshape(-1), (mean_predict-3*std).reshape(100,), (mean_predict+3*std).reshape(100,),color='grey',alpha=0.3)
 
     plt.legend()
-    plt.savefig("result.png")
-    #plt.show()
+    #plt.savefig("result.png")
+    plt.show()
