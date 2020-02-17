@@ -45,16 +45,19 @@ def test1():
 	out_dim = 2 # mean and var
 	r_dim = 128  #128
 
-	x_all, y_all = sample_gp(n)
-	x_all = x_all.view(1, -1, 1).to(device)
-	y_all = y_all.view(1, -1, 1).to(device)
-	#x_obs, y_obs = sample_obs(x_all, y_all, B=1, N=30)
-
 	net = CNP(x_dim, y_dim, out_dim, r_dim).to(device)
-	optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
-	for _ in range(1000):
+	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+	for _ in range(10000):
+
+		x_all, y_all = sample_gp(n)
+		x_obs, y_obs = sample_obs(x_all, y_all, B=1, N=10)
+		x_all = x_all.view(1, -1, 1).to(device)
+		y_all = y_all.view(1, -1, 1).to(device)
+		x_obs = x_obs.view(1, -1, 1).to(device)
+		y_obs = y_obs.view(1, -1, 1).to(device)
+
 		optimizer.zero_grad()
-		out = net(x_all, y_all, x_all)
+		out = net(x_obs, y_obs, x_all)
 		mean = out[:, :, 0].unsqueeze(dim=2)
 		loss = torch.mean((y_all - mean)**2)
 		loss.backward()
@@ -62,10 +65,19 @@ def test1():
 		print(loss.item())
 
 	with torch.no_grad():
-		y_out = net(x_all, y_all, x_all)[:, :, 0]
-	plt.scatter(x_all.squeeze().cpu(), y_out.squeeze().cpu())
-	plt.scatter(x_all.squeeze().cpu(), y_all.squeeze().cpu())
-	plt.show()
+		for _ in range(10):
+			x_all, y_all = sample_gp(n)
+			x_obs, y_obs = sample_obs(x_all, y_all, B=1, N=10)
+			x_all = x_all.view(1, -1, 1).to(device)
+			y_all = y_all.view(1, -1, 1).to(device)
+			x_obs = x_obs.view(1, -1, 1).to(device)
+			y_obs = y_obs.view(1, -1, 1).to(device)
+			y_out = net(x_obs, y_obs, x_all)[:, :, 0]
+			plt.scatter(x_all.squeeze().cpu(), y_all.squeeze().cpu(), label='tar')
+			plt.scatter(x_all.squeeze().cpu(), y_out.squeeze().cpu(), label='pred')
+			plt.scatter(x_obs.squeeze().cpu(), y_obs.squeeze().cpu(), label='obs')
+			plt.legend()
+			plt.show()
 
 
 test1()
