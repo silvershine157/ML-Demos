@@ -68,7 +68,7 @@ def get_gaussian_params(out):
 	return mean, var
 
 
-def test2():
+def test():
 
 	n = 30
 	B = 32
@@ -99,8 +99,10 @@ def test2():
 			running_loss = 0.0
 			running_cnt = 0	
 
+	torch.save(net, 'data/ckpt')
+
 	with torch.no_grad():
-		for _ in range(20):
+		for _ in range(3):
 			x_obs, y_obs, x_tar, y_tar = sample_gp_task(n, 1)
 			out = net(x_obs, y_obs, x_tar)
 			mean, var = get_gaussian_params(out)
@@ -125,13 +127,14 @@ def plot_result(x_obs, y_obs, x_tar, y_tar, mean, var):
 	var = var.squeeze().cpu().numpy()
 	plt.scatter(x_tar, y_tar, label='tar')
 	plt.scatter(x_obs, y_obs, label='obs')
-	plt.scatter(x_tar, mean, label='mean')
+	#plt.scatter(x_tar, mean, label='mean')
 
 	sort_idx = np.argsort(x_tar)
 	x_sort = x_tar[sort_idx]
 	mean_sort = mean[sort_idx]
 	var_sort = var[sort_idx]
 	std_sort = np.sqrt(var_sort)
+	plt.plot(x_sort, mean_sort, label='pred mean', color='grey')
 	plt.fill_between(x_sort, mean_sort-3*std_sort, mean_sort+3*std_sort, color='grey',alpha=0.3)
 
 	plt.legend()
@@ -139,4 +142,4 @@ def plot_result(x_obs, y_obs, x_tar, y_tar, mean, var):
 
 
 
-test2()
+test()
