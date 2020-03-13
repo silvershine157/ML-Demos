@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.sparse as sp
 import torch
-
+import scipy
 
 def encode_onehot(labels):
     classes = set(labels)
@@ -24,6 +24,12 @@ def load_data(path, dataset):
                                     dtype=np.int32)
     
     # TODO build adjacency matrix using edge_unordered following the order of idx
+    N = len(idx)
+    n_edges = edges_unordered.shape[0]
+    adj = sp.csr_matrix((N, N))
+    for i in range(n_edges):
+        idx_from, idx_to = edges_unordered[i, :]
+        adj[idx_from, idx_to] = 1.0
 
     # TODO build symmetric adjacency matrix
 
