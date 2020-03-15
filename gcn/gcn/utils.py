@@ -29,9 +29,16 @@ def load_data(path, dataset):
     adj = sp.csr_matrix((N, N))
     for i in range(n_edges):
         idx_from, idx_to = edges_unordered[i, :]
-        adj[idx_from, idx_to] = 1.0
+        cpt_idx_from = np.where(idx == idx_from)[0][0]
+        cpt_idx_to = np.where(idx == idx_to)[0][0]
+        adj[cpt_idx_from, cpt_idx_to] = 1.0
 
     # TODO build symmetric adjacency matrix
+    adj = adj + adj.transpose()
+    print(adj.shape)
+    print(adj.sum())
+    print(n_edges)
+    raise NotImplementedError
 
     # TODO normalize features, adj
 
