@@ -39,6 +39,10 @@ def load_data(path, dataset):
     # TODO normalize features, adj
     adj = renormalize_adj(adj, N)     
 
+    no_edge = False
+    if no_edge:
+        adj = sp.identity(N)
+
     idx_train = range(140)
     idx_val = range(200, 500)
     idx_test = range(500, 1500)
@@ -69,9 +73,12 @@ def normalize(mx):
 
 
 def accuracy(output, labels):
+    '''
+    output: [N, nclass]
+    labels: [N], int
+    '''
     # TODO preds
-    preds = None
-
+    preds = torch.argmax(output, dim=1)
     correct = preds.eq(labels).double()
     correct = correct.sum()
     return correct / len(labels)
