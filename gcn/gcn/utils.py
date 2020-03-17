@@ -35,12 +35,10 @@ def load_data(path, dataset):
 
     # TODO build symmetric adjacency matrix
     adj = adj + adj.transpose()
-    print(adj.shape)
-    print(adj.sum())
-    print(n_edges)
-    raise NotImplementedError
 
     # TODO normalize features, adj
+    adj = renormalize_adj(adj, N)    
+    
 
     idx_train = range(140)
     idx_val = range(200, 500)
@@ -56,6 +54,12 @@ def load_data(path, dataset):
 
     return adj, features, labels, idx_train, idx_val, idx_test
 
+def renormalize_adj(adj, N):
+    adj_tilde = adj + sp.identity(N)
+    node_deg = adj_tilde.sum(axis=0)
+    scaling_vec = 1/np.sqrt(node_deg)
+    adj_hat = adj_tilde.multiply(scaling_vec).multiply(scaling_vec.transpose()) # broadcast
+    return adj_hat
 
 def normalize(mx): 
     # TODO normalization of given matrix mx
