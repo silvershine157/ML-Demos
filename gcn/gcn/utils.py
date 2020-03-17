@@ -12,7 +12,7 @@ def encode_onehot(labels):
     return labels_onehot
 
 
-def load_data(path, dataset):
+def load_data(path, dataset, no_edge):
     print('Loading {} dataset...'.format(dataset))
     idx_features_labels = np.genfromtxt("{}{}.content".format(path, dataset),
                                         dtype=np.dtype(str))
@@ -39,7 +39,6 @@ def load_data(path, dataset):
     # TODO normalize features, adj
     adj = renormalize_adj(adj, N)     
 
-    no_edge = False
     if no_edge:
         adj = sp.identity(N)
 
