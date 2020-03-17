@@ -37,8 +37,7 @@ def load_data(path, dataset):
     adj = adj + adj.transpose()
 
     # TODO normalize features, adj
-    adj = renormalize_adj(adj, N)    
-    
+    adj = renormalize_adj(adj, N)     
 
     idx_train = range(140)
     idx_val = range(200, 500)
@@ -47,6 +46,7 @@ def load_data(path, dataset):
     features = torch.FloatTensor(np.array(features.todense()))
     labels = torch.LongTensor(np.where(labels)[1])
     adj = sparse_mx_to_torch_sparse_tensor(adj)
+    features = normalize(features)
 
     idx_train = torch.LongTensor(idx_train)
     idx_val = torch.LongTensor(idx_val)
@@ -63,6 +63,8 @@ def renormalize_adj(adj, N):
 
 def normalize(mx): 
     # TODO normalization of given matrix mx
+    D = mx.size(1)
+    mx = (1/np.sqrt(D))*mx
     return mx
 
 
