@@ -6,15 +6,15 @@ from model import *
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def siamese_expr(train_data, test_data):
-	batch_size = 64
+	batch_size = 128
 	n_pairs = 10000
 	train_loader = get_siamese_loader(train_data, n_pairs, batch_size)
 	net = SiameseNetwork()
 	net.to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-	for epoch in range(10):
+	for epoch in range(20):
 		loss = train_epoch(net, train_loader, optimizer)
-		print("(epoch {}) training loss {:g}".format(epoch, loss))
+		print("(epoch {}) train loss: {:g}".format(epoch, loss))
 
 def train_epoch(net, train_loader, optimizer):
 	running_n = 0
@@ -30,9 +30,18 @@ def train_epoch(net, train_loader, optimizer):
 		running_n += B
 	return running_loss/running_n
 
-def main():
+def test_epoch(net, data):
+	for batch_i, batch in enumerate(train_loader):
+		support, query, label = batch
+
+
+def test1():
 	train_data, test_data = load_omniglot()
 	siamese_expr(train_data, test_data)
 
+def test2():
+	train_data, test_data = load_omniglot()
+	get_episode_loader(test_data, 5, 3)
+	pass
 
-main()
+test2()

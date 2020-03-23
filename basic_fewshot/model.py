@@ -32,6 +32,16 @@ class SiameseNetwork(nn.Module):
 		loss = F.binary_cross_entropy(p, label)
 		return loss
 
+	# C-way K-shot inference
+	def infer(self, support, query):
+		'''
+		support: [1, C, K, 1, 105, 105]
+		query: [1, Q, 1, 105, 105]
+		---
+		pred: [1, Q]
+		'''
+
+
 class EncoderCNN(nn.Module):
 	def __init__(self, d_embed):
 		super(EncoderCNN, self).__init__()

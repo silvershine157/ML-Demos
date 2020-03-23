@@ -1,7 +1,8 @@
 import torchvision
 import torch
+import numpy as np
 import random
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 
 
 def load_omniglot():
@@ -44,4 +45,47 @@ def get_siamese_loader(data, n_pairs, batch_size):
 		labels[i] = label
 	dataset = TensorDataset(pairs, labels)
 	loader = DataLoader(dataset, batch_size=batch_size)
+	return loader
+
+
+class EpisodeDataset(Dataset):
+	def __init__(self, data, n_episodes, C, K):
+		self.data = data
+		self.n_episodes = n_episodes
+		self.C = C
+		self.K = K
+
+	def __len__(self):
+		return self.n_episodes
+
+	def __getitem__(self, idx):
+		'''
+		{
+			"support": [C, K, 1, 105, 105]
+			"query": [Q, 1, 105, 105]
+			"label": [Q]
+		}
+		'''
+		n_classes = self.data.size(0)
+		n_examples = self.data.size(1)
+		classes = np.random.choice(np.arange(n_classes), self.C, replace=False)
+		ep_data = self.data[classes, :, :, :, :] # [C, n_examples, 1, 105, 105]
+		perm = torch.randperm(n_examples)
+		support_idx = perm[:self.K]
+		query_idx = perm[self.K:]
+		support = ep_data[:, support_idx, :, :, :]
+		query = ep_data[:, query_idx, :, :, :].view((-1, 1, 105, 105))
+		label = torch.arange(self.C).unsqueeze(1).repeat(1, n_examples-self.K).view(-1)
+		item = {"support": support, "query": query, "label": label}
+		return item
+
+
+def get_episode_loader(data, C, K):
+	'''
+	data: [n_classes, 20, 1, 105, 105]
+	---
+	loader
+	'''
+	dataset = EpisodeDataset(data, 100, C, K)
+	loader = DataLoader(dataset, batch_size=1)
 	return loader
