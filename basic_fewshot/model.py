@@ -40,7 +40,8 @@ class SiameseNetwork(nn.Module):
 		---
 		pred: [1, Q]
 		'''
-
+		# TODO: efficient comparison by caching h0,h1
+		pass
 
 class EncoderCNN(nn.Module):
 	def __init__(self, d_embed):
