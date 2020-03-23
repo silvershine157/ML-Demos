@@ -3,6 +3,7 @@ import torch
 import random
 from torch.utils.data import DataLoader, TensorDataset
 
+
 def load_omniglot():
 	dataset = torchvision.datasets.Omniglot(
 		root="./data", download=True, transform=torchvision.transforms.ToTensor()
@@ -18,6 +19,7 @@ def load_omniglot():
 	train_data = full_data[:train_n] # [train_n, 20, 1, 105, 105]
 	test_data = full_data[train_n:]
 	return train_data, test_data
+
 
 def get_siamese_loader(data, n_pairs, batch_size):
 	'''
