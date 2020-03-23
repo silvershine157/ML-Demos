@@ -1,14 +1,24 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class SiameseNetwork(nn.Module):
 	def __init__(self):
 		super(SiameseNetwork, self).__init__()
 		d_embed = 64
 		self.encoder = EncoderCNN(d_embed)
+		self.distance_weights = nn.Linear(d_embed, 1)
 
-	def prob_same_class(self, x1, x2):
-		p = None
+	def prob_same_class(self, img0, img1):
+		'''
+		img0,1: [B, 1, 105, 105]
+		---
+		p: [B]
+		'''
+		h0 = self.encoder(img0)
+		h1 = self.encoder(img1)
+		p = torch.sigmoid(self.distance_weights(torch.abs(h0 - h1)))
+		p = p.squeeze(dim=1)
 		return p
 
 	def loss(self, pair, label):
@@ -18,9 +28,8 @@ class SiameseNetwork(nn.Module):
 		'''
 		img0 = pair[:, 0, :, :, :]
 		img1 = pair[:, 1, :, :, :]
-		h0 = self.encoder(img0)
-		#h1 = self.encoder(img1)
-		loss = None
+		p = self.prob_same_class(img0, img1)
+		loss = F.binary_cross_entropy(p, label)
 		return loss
 
 class EncoderCNN(nn.Module):
@@ -52,4 +61,4 @@ class EncoderCNN(nn.Module):
 		features_cnn = self.layers(img)
 		features_flat = features_cnn.view(B, -1)
 		h = self.fc(features_flat)
-		print(h.shape)
+		return h
