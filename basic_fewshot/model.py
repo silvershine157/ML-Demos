@@ -9,14 +9,12 @@ class SiameseNetwork(nn.Module):
 		self.encoder = EncoderCNN(d_embed)
 		self.distance_weights = nn.Linear(d_embed, 1)
 
-	def prob_same_class(self, img0, img1):
+	def prob_same_class(self, h0, h1):
 		'''
-		img0,1: [B, 1, 105, 105]
+		h0,1: [shape, d_embed]
 		---
-		p: [B]
+		p: [shape]
 		'''
-		h0 = self.encoder(img0)
-		h1 = self.encoder(img1)
 		p = torch.sigmoid(self.distance_weights(torch.abs(h0 - h1)))
 		p = p.squeeze(dim=1)
 		return p
@@ -28,7 +26,9 @@ class SiameseNetwork(nn.Module):
 		'''
 		img0 = pair[:, 0, :, :, :]
 		img1 = pair[:, 1, :, :, :]
-		p = self.prob_same_class(img0, img1)
+		h0 = self.encoder(img0)
+		h1 = self.encoder(img1)
+		p = self.prob_same_class(h0, h1)
 		loss = F.binary_cross_entropy(p, label)
 		return loss
 
@@ -40,8 +40,18 @@ class SiameseNetwork(nn.Module):
 		---
 		pred: [1, Q]
 		'''
-		# TODO: efficient comparison by caching h0,h1
-		pass
+		C = support.size(1)
+		K = support.size(2)
+		Q = query.size(1)
+		flat_support = support.view((-1, 1, 105, 105))
+		h_s = self.encoder(flat_support).view((C, K, -1)) # [C, K, d_embed]
+		h_q = self.encoder(query.squeeze(0)) # [Q, d_embed]
+		h_s_expand = h_s.unsqueeze(0).expand((Q, -1, -1, -1))
+		h_q_expand = h_q.unsqueeze(1).unsqueeze(2).expand((-1, C, K, -1))
+		p_tensor = self.prob_same_class(h_s_expand, h_q_expand).squeeze(3) # [Q, C, K]
+		p_matrix = torch.mean(p_tensor, dim=2) # [Q, C]
+		pred = torch.argmax(p_matrix, dim=1).unsqueeze(0) # [1, Q]
+		return pred
 
 class EncoderCNN(nn.Module):
 	def __init__(self, d_embed):

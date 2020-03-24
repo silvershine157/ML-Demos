@@ -31,9 +31,10 @@ def train_epoch(net, train_loader, optimizer):
 	return running_loss/running_n
 
 def test_epoch(net, data):
+	ep_loader = get_episode_loader(data, C, K)
 	for batch_i, batch in enumerate(train_loader):
 		support, query, label = batch
-
+		#TODO
 
 def test1():
 	train_data, test_data = load_omniglot()
@@ -44,4 +45,14 @@ def test2():
 	get_episode_loader(test_data, 5, 3)
 	pass
 
-test2()
+def test3():
+	Q = 7
+	K = 2
+	C = 5
+	net = SiameseNetwork()
+	support = torch.zeros((1, C, K, 1, 105, 105))
+	query = torch.zeros((1, Q, 1, 105, 105))
+	label = torch.zeros((Q))
+	pred = net.infer(support, query)
+
+test3()
