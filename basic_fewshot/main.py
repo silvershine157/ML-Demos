@@ -8,15 +8,20 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def siamese_expr(train_data, test_data):
 	batch_size = 128
 	n_pairs = 10000
+	C = 5
+	K = 3
 	train_loader = get_siamese_loader(train_data, n_pairs, batch_size)
+	test_loader = get_episode_loader(test_data, C, K)
 	net = SiameseNetwork()
 	net.to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 	for epoch in range(20):
-		loss = train_epoch(net, train_loader, optimizer)
-		print("(epoch {}) train loss: {:g}".format(epoch, loss))
+		train_loss = train_epoch(net, train_loader, optimizer)
+		test_acc = test_epoch(net, test_loader)
+		print("(epoch {}) train loss: {:g} test acc: {:g}".format(epoch, train_loss, test_acc))
 
 def train_epoch(net, train_loader, optimizer):
+	net.train()
 	running_n = 0
 	running_loss = 0.0
 	for batch_i, batch in enumerate(train_loader):
@@ -30,29 +35,22 @@ def train_epoch(net, train_loader, optimizer):
 		running_n += B
 	return running_loss/running_n
 
-def test_epoch(net, data):
-	ep_loader = get_episode_loader(data, C, K)
-	for batch_i, batch in enumerate(train_loader):
-		support, query, label = batch
-		#TODO
+def test_epoch(net, test_loader):
+	net.eval()
+	running_correct = 0
+	running_Q = 0
+	with torch.no_grad():
+		for batch_i, batch in enumerate(test_loader):
+			support = batch["support"].to(device)
+			query = batch["query"].to(device)
+			label = batch["label"].to(device)
+			pred = net.infer(support, query)
+			running_Q += query.size(1)
+			running_correct += torch.sum(pred == label).item()
+	return running_correct/running_Q
 
 def test1():
 	train_data, test_data = load_omniglot()
 	siamese_expr(train_data, test_data)
 
-def test2():
-	train_data, test_data = load_omniglot()
-	get_episode_loader(test_data, 5, 3)
-	pass
-
-def test3():
-	Q = 7
-	K = 2
-	C = 5
-	net = SiameseNetwork()
-	support = torch.zeros((1, C, K, 1, 105, 105))
-	query = torch.zeros((1, Q, 1, 105, 105))
-	label = torch.zeros((Q))
-	pred = net.infer(support, query)
-
-test3()
+test1()
