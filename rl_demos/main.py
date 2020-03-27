@@ -36,7 +36,7 @@ class evaluate:
 	class mrp:
 		def mc(mrp):
 			# first visit monte carlo
-			episodes = 100
+			episodes = 1000
 			horizon = 30 # as an approximation to infinity
 			visit_sum = np.zeros(mrp.Ns, np.int)
 			return_sum = np.zeros(mrp.Ns)
@@ -50,16 +50,26 @@ class evaluate:
 						visit_sum[state] += 1
 						visited[state] = True
 						discount[state] = 1.0
-					return_sum[state] += discount[state]*reward
+					return_sum += reward*discount
 					discount = mrp.gamma*discount
 			V = return_sum/visit_sum
 			return V
 
 		def analytic(mrp):
-			pass
-		def iterative(mrp):
-			pass
+			# analytically using matrix inverse
+			temp = np.linalg.inv(np.eye(mrp.Ns) - mrp.gamma*np.transpose(mrp.P))
+			V = np.matmul(temp, mrp.R)
+			return V
 
+		def iterative(mrp):
+			V = np.zeros(mrp.Ns)
+			for _ in range(20):
+				V = mrp_bellman(V, mrp.P, mrp.R, mrp.gamma)
+				#print(V)
+			return V
+
+def mrp_bellman(V, P, R, gamma):
+	return R + gamma*np.matmul(np.transpose(P), V)
 
 def test1():
 	# MRP simulation test
@@ -70,12 +80,21 @@ def test1():
 		state, reward = mrp.step()
 		print(state, reward)
 
+
 def test2():
 	# compare MRP evaluation methods
-	Ns = 3
+	Ns = 5
 	mrp = MarkovRewardProcess.create_random(Ns)
+	print("MRP evaluation test")
+	print('MC')
 	V_mc = evaluate.mrp.mc(mrp)
 	print(V_mc)
+	print('analytic')
+	V_analytic = evaluate.mrp.analytic(mrp)
+	print(V_analytic)
+	print('iterative')
+	V_iter = evaluate.mrp.iterative(mrp)
+	print(V_iter)
 
 test2()
 
