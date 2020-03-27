@@ -16,11 +16,42 @@ def siamese_expr(train_data, test_data):
 	net.to(device)
 	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 	for epoch in range(20):
-		train_loss = train_epoch(net, train_loader, optimizer)
+		train_loss = train_siamese_epoch(net, train_loader, optimizer)
 		test_acc = test_epoch(net, test_loader)
 		print("(epoch {}) train loss: {:g} test acc: {:g}".format(epoch, train_loss, test_acc))
 
-def train_epoch(net, train_loader, optimizer):
+def matching_expr(train_data, test_data):
+	batch_size = 128
+	C = 5
+	K = 1
+	train_loader = get_episode_loader(train_data, C, K)
+	test_loader = get_episode_loader(test_data, C, K)
+	net = MatchingNetwork()
+	net.to(device)
+	optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+	for epoch in range(20):
+		train_loss = train_episode_epoch(net, train_loader, optimizer)
+		test_acc = test_epoch(net, test_loader)
+		print("(epoch {}) train loss: {:g} test acc: {:g}".format(epoch, train_loss, test_acc))
+		#print("(epoch {}) train loss: {:g} test acc: {:g}".format(epoch, train_loss, 0.0))
+
+def train_episode_epoch(net, train_loader, optimizer):
+	net.train()
+	running_n = 0
+	running_loss = 0.0
+	for batch_i, batch in enumerate(train_loader):
+		support = batch["support"].to(device)
+		query = batch["query"].to(device)
+		label = batch["label"].to(device)
+		loss = net.loss(support, query, label)
+		loss.backward()
+		optimizer.step()
+		running_loss += loss.item()
+		running_n += 1
+	return running_loss/running_n
+
+
+def train_siamese_epoch(net, train_loader, optimizer):
 	net.train()
 	running_n = 0
 	running_loss = 0.0
@@ -51,6 +82,7 @@ def test_epoch(net, test_loader):
 
 def test1():
 	train_data, test_data = load_omniglot()
-	siamese_expr(train_data, test_data)
+	#siamese_expr(train_data, test_data)
+	matching_expr(train_data, test_data)
 
 test1()
