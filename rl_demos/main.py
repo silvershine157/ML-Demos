@@ -32,6 +32,37 @@ class MarkovRewardProcess(object):
 		gamma = 0.5
 		return MarkovRewardProcess(Ns, P, R, gamma)
 
+class MarkovDecisionProcess(object):
+	def __init__(self, Ns, Na, P, R, gamma):
+		'''
+		Ns: int
+		Na: int
+		P: [Ns, Na, Ns]
+		R: [Ns, Na]
+		gamma: float 0~1
+		'''
+		self.Ns = Ns
+		self.Na = Na
+		self.P = P
+		self.R = R
+		self.gamma = gamma
+
+	def initialize(self, start=0):
+		self.state = start
+		return self.state
+
+	def step(self, action):
+		reward = self.R[self.state, action]
+		next_state = np.random.choice(np.arange(self.Ns), p=self.P[self.state, action, :])
+		return next_state, reward
+
+	def create_random(Ns, Na):
+		P = np.random.dirichlet(10.0*np.ones(Ns), (Ns, Na))
+		R = np.random.rand(Ns, Na)
+		gamma = 0.5
+		return MarkovDecisionProcess(Ns, Na, P, R, gamma)
+
+
 class evaluate:
 	class mrp:
 		def mc(mrp):
@@ -72,7 +103,7 @@ def mrp_bellman(V, P, R, gamma):
 	return R + gamma*np.matmul(np.transpose(P), V)
 
 def test1():
-	# MRP simulation test
+	# MRP simulation
 	Ns = 3
 	mrp = MarkovRewardProcess.create_random(Ns)
 	mrp.initialize()
@@ -80,12 +111,11 @@ def test1():
 		state, reward = mrp.step()
 		print(state, reward)
 
-
 def test2():
 	# compare MRP evaluation methods
 	Ns = 5
 	mrp = MarkovRewardProcess.create_random(Ns)
-	print("MRP evaluation test")
+	print("< MRP evaluation test >")
 	print('MC')
 	V_mc = evaluate.mrp.mc(mrp)
 	print(V_mc)
@@ -96,5 +126,25 @@ def test2():
 	V_iter = evaluate.mrp.iterative(mrp)
 	print(V_iter)
 
-test2()
+def random_policy(Ns, Na):
+	'''
+	policy: [Ns, Na]
+	'''
+	policy = np.random.dirichlet(10.0*np.ones(Na), Ns)
+	return policy
+
+def test3():
+	# MDP simulation
+	Ns = 3
+	Na = 5
+	mdp = MarkovDecisionProcess.create_random(Ns, Na)
+	policy = random_policy(Ns, Na)
+	state = mdp.initialize()
+	for _ in range(5):
+		action = np.random.choice(np.arange(Na), p=policy[state, :])
+		print(state, action)
+		state, reward = mdp.step(action)
+		print('reward: {:g}'.format(reward))
+
+test3()
 
