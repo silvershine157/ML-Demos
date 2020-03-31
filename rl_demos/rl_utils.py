@@ -54,6 +54,7 @@ class MarkovDecisionProcess(object):
 	def step(self, action):
 		reward = self.R[self.state, action]
 		next_state = np.random.choice(np.arange(self.Ns), p=self.P[self.state, action, :])
+		self.state = next_state
 		return next_state, reward
 
 	def create_random(Ns, Na):
@@ -100,24 +101,25 @@ class evaluate:
 			return V
 
 	class mdp_policy:
-		def mc(mdp):
+		def mc(mdp, policy):
 			# first visit monte carlo
-			episodes = 100
+			episodes = 1000
 			horizon = 30
-			visit_sum = np.zeros(mrp.Ns, np.int)
-			return_sum = np.zeros(mrp.Ns)
+			visit_sum = np.zeros(mdp.Ns, np.int)
+			return_sum = np.zeros(mdp.Ns)
 			for ep in range(episodes):
-				discount = np.zeros(mrp.Ns)
-				visited = np.zeros(mrp.Ns, dtype=np.bool)
-				mrp.initialize()
+				discount = np.zeros(mdp.Ns)
+				visited = np.zeros(mdp.Ns, dtype=np.bool)
+				state = mdp.initialize()
 				for t in range(horizon):
-					state, reward = mrp.step()
 					if not visited[state]:
-						visit_sum[state] += 1
 						visited[state] = True
+						visit_sum[state] += 1
 						discount[state] = 1.0
+					action = sample_action(policy, state)
+					state, reward = mdp.step(action)
 					return_sum += reward*discount
-					discount = mrp.gamma*discount
+					discount = mdp.gamma*discount
 			V = return_sum/visit_sum
 			return V
 
@@ -138,10 +140,17 @@ def mdp_policy_to_mrp(mdp, policy):
 def mrp_bellman(V, P, R, gamma):
 	return R + gamma*np.matmul(np.transpose(P), V)
 
+def sample_action(policy, state):
+	'''
+	policy: [Ns, Na]
+	'''
+	Na = policy.shape[1]
+	action = np.random.choice(np.arange(Na), p=policy[state, :])
+	return action
+
 def random_policy(Ns, Na):
 	'''
 	policy: [Ns, Na]
 	'''
-	policy = np.random.dirichlet(10.0*np.ones(Na), Ns)
+	policy = np.random.dirichlet(1.0*np.ones(Na), Ns)
 	return policy
-

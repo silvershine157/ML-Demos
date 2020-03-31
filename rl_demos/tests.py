@@ -34,7 +34,7 @@ def test3():
 	policy = random_policy(Ns, Na)
 	state = mdp.initialize()
 	for _ in range(5):
-		action = np.random.choice(np.arange(Na), p=policy[state, :])
+		action = sample_action(policy, state)
 		print(state, action)
 		state, reward = mdp.step(action)
 		print('reward: {:g}'.format(reward))
@@ -46,8 +46,14 @@ def test4():
 	Na = 5
 	mdp = MarkovDecisionProcess.create_random(Ns, Na)
 	policy = random_policy(Ns, Na)
-	mrp = mdp_policy_to_mrp(mdp, policy)
-	
+	print("< MDP Policy evaluation test >")
+	print('MC')
+	V_mdp_mc = evaluate.mdp_policy.mc(mdp, policy)
+	print(V_mdp_mc)
+	print('analytic')
+	induced_mrp = mdp_policy_to_mrp(mdp, policy)
+	V_mrp_mc = evaluate.mrp.analytic(induced_mrp)
+	print(V_mrp_mc)
+
 
 test4()
-
