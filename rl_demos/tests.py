@@ -39,5 +39,15 @@ def test3():
 		state, reward = mdp.step(action)
 		print('reward: {:g}'.format(reward))
 
-test3()
+
+def test4():
+	# MDP + stationary policy -> MRP
+	Ns = 3
+	Na = 5
+	mdp = MarkovDecisionProcess.create_random(Ns, Na)
+	policy = random_policy(Ns, Na)
+	mrp = mdp_policy_to_mrp(mdp, policy)
+	
+
+test4()
 

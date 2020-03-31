@@ -99,6 +99,42 @@ class evaluate:
 				#print(V)
 			return V
 
+	class mdp_policy:
+		def mc(mdp):
+			# first visit monte carlo
+			episodes = 100
+			horizon = 30
+			visit_sum = np.zeros(mrp.Ns, np.int)
+			return_sum = np.zeros(mrp.Ns)
+			for ep in range(episodes):
+				discount = np.zeros(mrp.Ns)
+				visited = np.zeros(mrp.Ns, dtype=np.bool)
+				mrp.initialize()
+				for t in range(horizon):
+					state, reward = mrp.step()
+					if not visited[state]:
+						visit_sum[state] += 1
+						visited[state] = True
+						discount[state] = 1.0
+					return_sum += reward*discount
+					discount = mrp.gamma*discount
+			V = return_sum/visit_sum
+			return V
+
+def mdp_policy_to_mrp(mdp, policy):
+	'''
+	policy: [Ns, Na]
+	P: [Ns, Na, Ns]
+	R: [Ns, Na]
+	---
+	P_pi: [Ns, Na]
+	R_pi: [Ns]
+	'''
+	P_pi = np.einsum('sa,san->sn', policy, mdp.P)
+	R_pi = np.einsum('sa,sa->s', policy, mdp.R)
+	mrp = MarkovRewardProcess(mdp.Ns, P_pi, R_pi, mdp.gamma)
+	return mrp
+
 def mrp_bellman(V, P, R, gamma):
 	return R + gamma*np.matmul(np.transpose(P), V)
 
@@ -108,3 +144,4 @@ def random_policy(Ns, Na):
 	'''
 	policy = np.random.dirichlet(10.0*np.ones(Na), Ns)
 	return policy
+
