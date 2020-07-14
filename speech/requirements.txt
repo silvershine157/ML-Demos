@@ -1,0 +1,5 @@
+torch
+torchaudio
+matplotlib
+librosa==0.7.2
+numba==0.48
