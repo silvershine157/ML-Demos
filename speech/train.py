@@ -6,6 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from dataset import *
 from model import *
+from const import *
 
 def loss_fn(S_pred, stop_logits, S_true, S_true_lengths):
     '''
@@ -20,7 +21,7 @@ def loss_fn(S_pred, stop_logits, S_true, S_true_lengths):
     len_to_pad = max_dec_len - S_true.shape[0]
     assert len_to_pad > 0
     S_true_ext = F.pad(S_true, [0, 0, 0, 0, 0, len_to_pad])
-    length_mask_list = [torch.ones(true_len) for true_len in S_true_lengths]
+    length_mask_list = [torch.ones(true_len, device=device) for true_len in S_true_lengths]
     length_mask = F.pad(pad_sequence(length_mask_list), [0, 0, 0, len_to_pad])
     # length_mask: [max_dec_len, B]
     stop_loss = F.binary_cross_entropy_with_logits(stop_logits, length_mask, reduction='mean')
@@ -32,28 +33,21 @@ def loss_fn(S_pred, stop_logits, S_true, S_true_lengths):
 def linspec_train():
     # train with linear spectrogram
     # later converted to audio using Griffin-Lim
-    loader = get_lj_loader()
+    loader = get_lj_loader(batch_size=32, limit=64)
     net = MiniTTS()
     optimizer = torch.optim.Adam(net.parameters())
     net.train()
+    net.to(device)
     for batch in loader:
         S_pad, S_lengths, token_pad, token_lengths = batch
+        S_pad = S_pad.to(device)
+        token_pad = token_pad.to(device)
         optimizer.zero_grad()
         enc_out = net.encoder(token_pad, token_lengths)
-        S_pred, stop_logits = net.decoder(enc_out, S_pad)
+        S_pred, stop_logits = net.decoder(enc_out, S_pad, teacher_forcing=True)
         loss = loss_fn(S_pred, stop_logits, S_pad, S_lengths)
         loss.backward()
         optimizer.step()
         print(loss)
-
-def linspec_sample():
-    # produce audio sample for linear spectrogram model
-    loader = get_lj_loader()
-    net = MiniTTS()
-    for batch in loader:
-        S_pad, S_lengths, token_pad, token_lengths = batch
-        enc_out = net.encoder(token_pad, token_lengths)
-        S_pred, stop_logits = net.decoder(enc_out, None, teacher_forcing=False)        
-        break
 
 linspec_train()

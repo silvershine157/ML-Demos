@@ -13,8 +13,9 @@ def decompress_amplitude(S_comp):
     return S_uncomp
 
 class LinSpecDataset(Dataset):
-    def __init__(self, base_ds):
+    def __init__(self, base_ds, limit):
         self.base_ds = base_ds
+        self.limit = limit
         sr = 22050
         n_fft = int(0.05*sr)
         win_length = n_fft
@@ -37,7 +38,10 @@ class LinSpecDataset(Dataset):
         return wav
 
     def __len__(self):
-        return len(self.base_ds)
+        if self.limit is None:
+            return len(self.base_ds)
+        else:
+            return self.limit
 
     def __getitem__(self, i):
         wav, _, _, txt = self.base_ds[i]
@@ -73,7 +77,7 @@ def collate_lj(L):
     return (S_pad, S_lengths, token_pad, token_lengths)
 
 
-def get_lj_loader():
-    dataset = LinSpecDataset(torchaudio.datasets.LJSPEECH('./data'))
-    loader = DataLoader(dataset, shuffle=True, batch_size=4, collate_fn=collate_lj)
+def get_lj_loader(batch_size=4, limit=None):
+    dataset = LinSpecDataset(torchaudio.datasets.LJSPEECH('./data'), limit)
+    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, collate_fn=collate_lj)
     return loader

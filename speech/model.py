@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import textproc
+from const import *
 
 class MiniTTS(nn.Module):
 
@@ -70,8 +71,6 @@ class MiniTTS(nn.Module):
 		'''
 		B = enc_out.shape[0]
 		state = (enc_out, enc_out)
-		
-		S_frame_out = torch.zeros(B, self.d_spec)
 		S_pred_list = []
 		stop_logits_list = []
 		if teacher_forcing:
@@ -81,11 +80,11 @@ class MiniTTS(nn.Module):
 		for t in range(self.max_dec_len):
 			if t > 0:
 				if teacher_forcing:
-					S_frame_in = S_true_ext[t, :, :]
+					S_frame_in = S_true_ext[t-1, :, :]
 				else:
 					S_frame_in = S_frame_out
 			else:
-				S_frame_in = torch.zeros(B, self.d_spec)
+				S_frame_in = torch.zeros((B, self.d_spec), device=device)
 			state, S_frame_out, stop_logit = self.decoder_step(state, S_frame_in)
 			S_pred_list.append(S_frame_out)
 			stop_logits_list.append(stop_logit)
