@@ -31,6 +31,4 @@ def test2():
         print(S_pad.shape)
         enc_out = net.encoder(token_pad, token_lengths)
         S_pred, stop_logits = net.decoder(enc_out, S_pad)
-        
 
-test2()

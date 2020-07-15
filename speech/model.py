@@ -13,13 +13,14 @@ class MiniTTS(nn.Module):
 		d_spec = 552
 		self.d_hidden = d_hidden
 		self.d_spec = d_spec
+		self.max_dec_len = 1000
 		self.embedding = nn.Embedding(len(textproc.symbols), d_hidden)
 		self.enc_rnn = nn.LSTM(d_hidden, d_hidden)
 		self.dec_rnn_cell = nn.LSTMCell(d_hidden, d_hidden)
 		self.spec_pre = nn.Linear(d_spec, d_hidden)
 		self.spec_post = nn.Sequential(
 			nn.Linear(d_hidden, d_hidden),
-			nn.ReLU(),
+			nn.Tanh(),
 			nn.Linear(d_hidden, d_spec)
 		)
 		self.stop_layer = nn.Sequential(
@@ -59,25 +60,25 @@ class MiniTTS(nn.Module):
 		stop_logit = self.stop_layer(h_next).squeeze(1)
 		return next_state, S_frame_out, stop_logit
 
-	def decoder(self, enc_out, S_true):
+	def decoder(self, enc_out, S_true, teacher_forcing=True):
 		'''
 		enc_out: [B, d_hidden]
 		S_true: [St_max, B, d_spec] or None
 		---
 		S_pred: [max_dec_len, B, d_spec]
-		stop_logits: [max_dec_len]
+		stop_logits: [max_dec_len, B]
 		'''
 		B = enc_out.shape[0]
 		state = (enc_out, enc_out)
-		max_dec_len = 1000
+		
 		S_frame_out = torch.zeros(B, self.d_spec)
 		S_pred_list = []
 		stop_logits_list = []
-		teacher_forcing = True
-		len_to_pad = max_dec_len - S_true.shape[0]
-		assert len_to_pad > 0
-		S_true_ext = F.pad(S_true, [0, 0, 0, 0, 0, len_to_pad])
-		for t in range(max_dec_len):
+		if teacher_forcing:
+			len_to_pad = self.max_dec_len - S_true.shape[0]
+			assert len_to_pad > 0
+			S_true_ext = F.pad(S_true, [0, 0, 0, 0, 0, len_to_pad])
+		for t in range(self.max_dec_len):
 			if t > 0:
 				if teacher_forcing:
 					S_frame_in = S_true_ext[t, :, :]
