@@ -48,10 +48,10 @@ class LinSpecDataset(Dataset):
 def collate_lj(L):
     '''
     L: batch size list of
-        S: [Ls, 552]
+        S: [Ls, d_spec]
         tokens: [Lt]
     ---
-    S_pad: [Ls_max, B, 552]
+    S_pad: [Ls_max, B, d_spec]
     token_pad: [Lt_max, B]
     '''
     max_S_len = 0

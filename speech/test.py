@@ -28,7 +28,9 @@ def test2():
     loader = get_lj_loader()
     for batch in loader:
         S_pad, S_lengths, token_pad, token_lengths = batch
-        out = net(token_pad, token_lengths)
-        break
+        print(S_pad.shape)
+        enc_out = net.encoder(token_pad, token_lengths)
+        S_pred, stop_logits = net.decoder(enc_out, S_pad)
+        
 
 test2()
