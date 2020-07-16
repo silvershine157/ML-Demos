@@ -22,6 +22,8 @@ class MiniTTS(nn.Module):
 		self.spec_post = nn.Sequential(
 			nn.Linear(d_hidden, d_hidden),
 			nn.Tanh(),
+            nn.Linear(d_hidden, d_hidden),
+            nn.Tanh(),
 			nn.Linear(d_hidden, d_spec)
 		)
 		self.stop_layer = nn.Sequential(
