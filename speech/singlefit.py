@@ -21,15 +21,15 @@ class SingleDecoder(nn.Module):
         self.lstm = nn.LSTM(input_size=d_lstm_input, hidden_size=self.d_lstm_hidden, num_layers=2)
         self.lintrans = nn.Linear(self.d_lstm_hidden+self.d_context, d_spec)
         self.postnet = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=512, kernel_size=(5, 1), padding=(2,0)),
+            nn.Conv1d(in_channels=d_spec, out_channels=512, kernel_size=5, padding=2),
             nn.Tanh(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=(5, 1), padding=(2,0)),
+            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=5, padding=2),
             nn.Tanh(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=(5, 1), padding=(2,0)),
+            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=5, padding=2),
             nn.Tanh(),
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=(5, 1), padding=(2,0)),
+            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=5, padding=2),
             nn.Tanh(),
-            nn.Conv2d(in_channels=512, out_channels=1, kernel_size=(5, 1), padding=(2,0)),
+            nn.Conv1d(in_channels=512, out_channels=d_spec, kernel_size=5, padding=2)
         )
 
     def forward(self, S_pad):
@@ -50,9 +50,9 @@ class SingleDecoder(nn.Module):
             out_frame_list.append(out_frame)
         S_pred = torch.stack(out_frame_list) # [L, B, d_spec]
 
-        S_conv_in = S_pred.transpose(0, 1).unsqueeze(1) # [B, 1, L, d_spec]
+        S_conv_in = S_pred.transpose(0, 1).transpose(1, 2) # [B, d_spec, L]
         S_conv_out = self.postnet(S_conv_in)
-        S_residual = S_conv_out.squeeze(1).transpose(0, 1)
+        S_residual = S_conv_out.transpose(1, 2).transpose(0, 1) # [L, B, d_spec]
 
         S_pred = S_pred + S_residual
 

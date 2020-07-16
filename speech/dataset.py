@@ -45,7 +45,7 @@ class LinSpecDataset(Dataset):
 
     def __getitem__(self, i):
         wav, _, _, txt = self.base_ds[i]
-        S = compress_amplitude(self.wav_to_spec(wav))
+        S = self.wav_to_spec(wav)
         tokens = torch.LongTensor(textproc.text_to_sequence(txt, ["english_cleaners"]))
         return (S, tokens)
 
@@ -77,7 +77,9 @@ def collate_lj(L):
     return (S_pad, S_lengths, token_pad, token_lengths)
 
 
-def get_lj_loader(batch_size=4, limit=None):
+def get_lj_loader(batch_size=4, limit=None, get_dataset=False):
     dataset = LinSpecDataset(torchaudio.datasets.LJSPEECH('./data'), limit)
     loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, collate_fn=collate_lj)
+    if get_dataset:
+        return dataset, loader
     return loader
