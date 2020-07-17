@@ -89,7 +89,7 @@ def single_fit():
             loss = before_loss + after_loss
             loss.backward()
 
-            grad_norm = torch.nn.utils.clip_grad_norm_(net.paramters(), 1.0)
+            grad_norm = torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
 
             optimizer.step()
             print("epoch {:d}, loss: {:g}, grad_norm: {:g}".format(epoch, loss.item(), grad_norm))
