@@ -5,7 +5,6 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 from dataset import *
-from model import *
 from const import *
 
 def loss_fn(S_pred, stop_logits, S_true, S_true_lengths):
@@ -70,19 +69,3 @@ def train_epoch(net, loader, optimizer):
         running_n += B
         running_loss += B*loss.item()
     return running_loss/running_n
-
-def linspec_train():
-    # train with linear spectrogram
-    # later converted to audio using Griffin-Lim
-    n_epochs = 1000
-    save_every = 10
-    loader = get_lj_loader(batch_size=1, limit=1)
-    net = MiniTTS()
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-    net.train()
-    net.to(device)
-    for epoch in range(n_epochs):
-        train_loss = train_epoch(net, loader, optimizer)
-        print("Epoch {:d} train loss: {:g}".format(epoch, train_loss))
-        if (epoch+1)%save_every==0:
-            torch.save(net.state_dict(), 'data/ckpts/latest.sd')

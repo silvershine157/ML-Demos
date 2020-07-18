@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 
 from train import *
 from dataset import *
-from model import *
+
+from tacotron_model import Tacotron2
 
 def test1():
     # audio processing parameters
@@ -23,14 +24,15 @@ def test1():
     plt.show()
 
 def test2():
-    net = MiniTTS()
-    dataset = LinSpecDataset(torchaudio.datasets.LJSPEECH('./data'))
-    loader = get_lj_loader()
+    loader = get_lj_loader(batch_size=4, limit=4)
+    net = Tacotron2()
     for batch in loader:
         S_pad, S_lengths, token_pad, token_lengths = batch
         print(S_pad.shape)
-        enc_out = net.encoder(token_pad, token_lengths)
-        S_pred, stop_logits = net.decoder(enc_out, S_pad)
+        print(S_lengths.shape)
+        print(token_pad.shape)
+        print(token_lengths.shape)
+        S_before, S_after = Tacotron2(token_pad, token_lengths, S_pad, teacher_forcing=True)
 
-from singlefit import *
-single_fit()
+
+test2()
