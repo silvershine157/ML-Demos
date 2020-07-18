@@ -77,9 +77,9 @@ def collate_lj(L):
     return (S_pad, S_lengths, token_pad, token_lengths)
 
 
-def get_lj_loader(batch_size=4, limit=None, get_dataset=False):
+def get_lj_loader(batch_size=4, limit=None, get_dataset=False, num_workers=0, pin_memory=False):
     dataset = LinSpecDataset(torchaudio.datasets.LJSPEECH('./data'), limit)
-    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, collate_fn=collate_lj)
+    loader = DataLoader(dataset, shuffle=True, batch_size=batch_size, collate_fn=collate_lj, num_workers=num_workers, pin_memory=pin_memory)
     if get_dataset:
         return dataset, loader
     return loader

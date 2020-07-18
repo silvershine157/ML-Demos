@@ -31,12 +31,23 @@ def test2():
         S_pad, S_lengths, token_pad, token_lengths = batch
         S_before, S_after, stop_logits = net(token_pad.to(device), token_lengths, S_pad.to(device), teacher_forcing=True)
 
+def print_and_log(s):
+    with open('data/log.txt', 'a') as f:
+        f.write(s+'\n')
+    print(s)
+
 def test3():
-    loader = get_lj_loader(batch_size=4, limit=4)
+    loader = get_lj_loader(batch_size=4, limit=4, num_workers=4, pin_memory=True)
     net = Tacotron2()
     net.to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
-    train_loss = train_epoch(net, loader, optimizer)
-    print(train_loss)
+    n_epochs = 1000000
+    save_every = 20
+    for epoch in range(1, n_epochs+1):
+        train_loss = train_epoch(net, loader, optimizer)
+        print_and_log("epoch: {:d}, train loss: {:g}".format(epoch, train_loss))
+        if epoch%save_every == 0:
+            torch.save(net.state_dict(), 'data/ckpts/meancontext_{:d}.sd'.format(epoch))
+            torch.save(net.state_dict(), 'data/ckpts/meancontext_latest.sd')
 
 test3()
