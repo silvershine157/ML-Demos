@@ -26,8 +26,17 @@ def test1():
 def test2():
     loader = get_lj_loader(batch_size=4, limit=4)
     net = Tacotron2()
+    net.to(device)
     for batch in loader:
         S_pad, S_lengths, token_pad, token_lengths = batch
-        S_before, S_after, stop_logits = net(token_pad, token_lengths, S_pad, teacher_forcing=True)
+        S_before, S_after, stop_logits = net(token_pad.to(device), token_lengths, S_pad.to(device), teacher_forcing=True)
 
-test2()
+def test3():
+    loader = get_lj_loader(batch_size=4, limit=4)
+    net = Tacotron2()
+    net.to(device)
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+    train_loss = train_epoch(net, loader, optimizer)
+    print(train_loss)
+
+test3()

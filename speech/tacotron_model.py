@@ -126,7 +126,7 @@ class AttnDecoder(nn.Module):
 
 		B = enc_out.shape[1]
 		St_max = S_true.shape[0]
-		zero_frame = torch.zeros((B, self.d_spec))
+		zero_frame = torch.zeros((B, self.d_spec), device=device)
 		spec_frame_list = []
 		stop_logit_list = []
 		lstm_state = (self.h_init.repeat(1, B, 1), self.c_init.repeat(1, B, 1))
