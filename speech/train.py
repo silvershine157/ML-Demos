@@ -40,7 +40,7 @@ def train_epoch(net, loader, optimizer):
         S_pad = S_pad.to(device)
         token_pad = token_pad.to(device)
         optimizer.zero_grad()
-        S_before, S_after, stop_logits = net(token_pad, token_lengths, S_pad, teacher_forcing=True)
+        S_before, S_after, stop_logits, attn_weights = net(token_pad, token_lengths, S_pad, teacher_forcing=True)
         loss = loss_fn(S_before, S_after, stop_logits, S_pad, S_lengths)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
