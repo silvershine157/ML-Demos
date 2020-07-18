@@ -28,11 +28,7 @@ def test2():
     net = Tacotron2()
     for batch in loader:
         S_pad, S_lengths, token_pad, token_lengths = batch
-        print(S_pad.shape)
-        print(S_lengths.shape)
-        print(token_pad.shape)
-        print(token_lengths.shape)
-        S_before, S_after = Tacotron2(token_pad, token_lengths, S_pad, teacher_forcing=True)
+        S_before, S_after = net(token_pad, token_lengths, S_pad, teacher_forcing=True)
 
 
 test2()
