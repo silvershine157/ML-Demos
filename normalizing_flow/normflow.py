@@ -37,7 +37,14 @@ class IdentityFlow(Flow):
 		return x
 
 	def log_det_jac(self, x):
-		return 0.0
+		'''
+		x: [B, ...]
+		---
+		res: [B]
+		'''
+		B = x.size(0)
+		res = torch.zeros(B)
+		return res
 
 class CompositeFlow(Flow):
 	def __init__(self, flow_list):
@@ -57,7 +64,13 @@ class CompositeFlow(Flow):
 		return x
 
 	def log_det_jac(self, x):
-		res = 0.0
+		'''
+		x: [B, ...]
+		---
+		res: [B]
+		'''
+		B = x.size(0)
+		res = torch.zeros(B)
 		for i in range(len(self.subflows)):
 			res += self.subflows[i].log_det_jac(x) # exploit chain rule
 			x = self.subflows[i].f(x)
@@ -115,10 +128,25 @@ class CouplingLayer1D(Flow):
 			x[:, self.half_dim:] = torch.exp(-log_scale) * (x[:, self.half_dim:] - bias)
 		return x
 
+	def log_det_jac(self, x):
+		'''
+		x: [B, full_dim]
+		---
+		res: [B]
+		'''
+		if self.change_first:
+			net_input = x[:, self.half_dim:] # input second half
+		else:
+			net_input = x[:, :self.half_dim] # input first half
+		net_out = self.net(net_input)
+		log_scale = net_out[:, :self.half_dim]
+		res = log_scale.sum(dim=1) # log(det(diag(exp(ls))))=log(prod(exp(ls)))=sum(log(exp(ls)))=sum(ls)
+		return res
+
 def test1():
 	flows = [IdentityFlow() for _ in range(5)]
 	cflow = CompositeFlow(flows)
-	x = torch.randn((5))
+	x = torch.randn((1, 5))
 	print(x)
 	z = cflow.f(x)
 	print(z)
@@ -135,8 +163,10 @@ def test2():
 	flow = CompositeFlow([flow_1, flow_2])
 	z = flow.f(x)
 	x_r = flow.f_inv(z)
+	ldj = flow.log_det_jac(x)
 	print(x)
 	print(z)
 	print(x_r)
+	print(ldj)
 
 test2()
