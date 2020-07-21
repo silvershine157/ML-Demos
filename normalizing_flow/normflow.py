@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchvision
 from torch.utils.data import DataLoader
 import numpy as np
+import matplotlib.pyplot as plt
 
 '''
 <convention>
@@ -206,7 +207,7 @@ def test3():
 	loader = DataLoader(ds, batch_size=B)
 	flow.to(device)
 	flow.train()
-	n_epochs = 10
+	n_epochs = 1000
 	for epoch in range(1, n_epochs+1):
 		running_n = 0
 		running_loss = 0.0
@@ -220,7 +221,6 @@ def test3():
 			log_p_z = log_pdf_unitnormal(z)
 			log_p_x = log_p_z + log_det_jac # change of variables
 			loss = -log_p_x.mean() # minimize NLL
-			print(loss)
 			loss.backward()
 			optimizer.step()
 			running_n += B
@@ -228,5 +228,28 @@ def test3():
 		avg_log_p_x = -(running_loss/running_n)
 		print('Epoch {:d} avg log p(x): {:g}'.format(epoch, avg_log_p_x))
 		torch.save(flow.state_dict(), 'data/state_dict/sd_{:d}'.format(epoch))
+		torch.save(flow.state_dict(), 'data/state_dict/sd_latest'.format(epoch))
 
-test3()
+def test4():
+	full_dim = 28*28
+	flow = CompositeFlow([
+		CouplingLayer1D(full_dim, True),
+		CouplingLayer1D(full_dim, False),
+		CouplingLayer1D(full_dim, True),
+		CouplingLayer1D(full_dim, False),
+		CouplingLayer1D(full_dim, True),
+		CouplingLayer1D(full_dim, False),
+	])
+	flow.load_state_dict(torch.load('data/state_dict/sd_10'))
+	flow.to(device)
+	flow.eval()
+	with torch.no_grad():
+		for _ in range(10):
+			z = torch.randn((1, full_dim), device=device)
+			x_flat = flow.f_inv(z)
+			x2d = x_flat.view((1, 1, 28, 28))
+			sample = x2d[0, 0, :, :].cpu().numpy()
+			plt.imshow(sample)
+			plt.show()
+
+test4()
