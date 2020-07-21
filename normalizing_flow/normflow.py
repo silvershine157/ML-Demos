@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 '''
 <convention>
@@ -8,7 +9,7 @@ f_inv: z -> x
 
 class Flow(nn.Module):
 	def __init__(self):
-		super(IdentityFlow, self).__init__()
+		super(Flow, self).__init__()
 
 	def f(self, x):
 		raise NotImplementedError
@@ -35,7 +36,7 @@ class IdentityFlow(Flow):
 		z = x
 		return z
 
-	def log_det_jac(self, z):
+	def log_det_jac(self, x):
 		return 0.0
 
 class CompositeFlow(Flow):
@@ -55,9 +56,22 @@ class CompositeFlow(Flow):
 			z = self.subflows[i].f_inv(z)
 		return z
 
-	def log_det_jac_wrt_z(self, z):
+	def log_det_jac(self, x):
 		res = 0.0
 		for i in range(len(self.subflows)):
-			res += self.subflows[i].log_det_jac(z) # exploit chain rule
-			z = self.subflows[i].f(z)
+			res += self.subflows[i].log_det_jac(x) # exploit chain rule
+			x = self.subflows[i].f(x)
 		return res
+
+def test1():
+	flows = [IdentityFlow() for _ in range(5)]
+	cflow = CompositeFlow(flows)
+	x = torch.randn((5))
+	print(x)
+	z = cflow.f(x)
+	print(z)
+	x_r = cflow.f_inv(z)
+	print(x_r)
+	print(cflow.log_det_jac(z))
+
+test1()
