@@ -78,11 +78,13 @@ class CouplingLayer1D(Flow):
 	def f(self, x):
 		'''
 		x: [B, full_dim]
+		---
+		z: [B, full_dim]
 		'''
 		if self.change_first:
-			net_input = x[:, :self.half_dim] # input second half
+			net_input = x[:, self.half_dim:] # input second half
 		else:
-			net_input = x[:, self.half_dim:] # input first half
+			net_input = x[:, :self.half_dim] # input first half
 		net_out = self.net(net_input)
 		log_scale = net_out[:, :self.half_dim]
 		bias = net_out[:, self.half_dim:]
@@ -92,6 +94,26 @@ class CouplingLayer1D(Flow):
 		else:
 			z[:, self.half_dim:] = torch.exp(log_scale) * z[:, self.half_dim:] + bias
 		return z
+
+	def f_inv(self, z):
+		'''
+		z: [B, full_dim]
+		---
+		x: [B, full_dim]
+		'''
+		if self.change_first:
+			net_input = z[:, self.half_dim:] # input second half (unchanged)
+		else:
+			net_input = z[:, :self.half_dim] # input first half (unchanged)
+		net_out = self.net(net_input)
+		log_scale = net_out[:, :self.half_dim]
+		bias = net_out[:, self.half_dim:]
+		x = z.clone()
+		if self.change_first:
+			x[:, :self.half_dim] = torch.exp(-log_scale) * (x[:, :self.half_dim] - bias)
+		else:
+			x[:, self.half_dim:] = torch.exp(-log_scale) * (x[:, self.half_dim:] - bias)
+		return x
 
 def test1():
 	flows = [IdentityFlow() for _ in range(5)]
@@ -105,11 +127,16 @@ def test1():
 	print(cflow.log_det_jac(z))
 
 def test2():
+	B = 2
 	full_dim = 4
-	x = torch.randn((1, full_dim))
-	flow = CouplingLayer1D(full_dim, True)
+	x = torch.randn((B, full_dim))
+	flow_1 = CouplingLayer1D(full_dim, True)
+	flow_2 = CouplingLayer1D(full_dim, False)
+	flow = CompositeFlow([flow_1, flow_2])
 	z = flow.f(x)
+	x_r = flow.f_inv(z)
 	print(x)
 	print(z)
+	print(x_r)
 
 test2()
