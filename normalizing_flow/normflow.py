@@ -28,13 +28,13 @@ class IdentityFlow(Flow):
 	def __init__(self):
 		super(IdentityFlow, self).__init__()
 
-	def f(self, z):
-		x = z
-		return x
-
-	def f_inv(self, x):
+	def f(self, x):
 		z = x
 		return z
+
+	def f_inv(self, z):
+		x = z
+		return x
 
 	def log_det_jac(self, x):
 		return 0.0
@@ -44,17 +44,17 @@ class CompositeFlow(Flow):
 		super(CompositeFlow, self).__init__()
 		self.subflows = nn.ModuleList(flow_list)
 
-	def f(self, z):
-		x = z
+	def f(self, x):
 		for i in range(len(self.subflows)):
 			x = self.subflows[i].f(x)
-		return x
-
-	def f_inv(self, x):
 		z = x
+		return z
+
+	def f_inv(self, z):
 		for i in reversed(range(len(self.subflows))):
 			z = self.subflows[i].f_inv(z)
-		return z
+		x = z
+		return x
 
 	def log_det_jac(self, x):
 		res = 0.0
@@ -62,6 +62,36 @@ class CompositeFlow(Flow):
 			res += self.subflows[i].log_det_jac(x) # exploit chain rule
 			x = self.subflows[i].f(x)
 		return res
+
+class CouplingLayer1D(Flow):
+	def __init__(self, full_dim, change_first):
+		super(CouplingLayer1D, self).__init__()
+		self.change_first = change_first
+		self.half_dim = full_dim//2
+		hidden_dim = 200
+		self.net = nn.Sequential(
+			nn.Linear(self.half_dim, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, full_dim)
+		)
+
+	def f(self, x):
+		'''
+		x: [B, full_dim]
+		'''
+		if self.change_first:
+			net_input = x[:, :self.half_dim] # input second half
+		else:
+			net_input = x[:, self.half_dim:] # input first half
+		net_out = self.net(net_input)
+		log_scale = net_out[:, :self.half_dim]
+		bias = net_out[:, self.half_dim:]
+		z = x.clone()
+		if self.change_first:
+			z[:, :self.half_dim] = torch.exp(log_scale) * z[:, :self.half_dim] + bias
+		else:
+			z[:, self.half_dim:] = torch.exp(log_scale) * z[:, self.half_dim:] + bias
+		return z
 
 def test1():
 	flows = [IdentityFlow() for _ in range(5)]
@@ -74,4 +104,12 @@ def test1():
 	print(x_r)
 	print(cflow.log_det_jac(z))
 
-test1()
+def test2():
+	full_dim = 4
+	x = torch.randn((1, full_dim))
+	flow = CouplingLayer1D(full_dim, True)
+	z = flow.f(x)
+	print(x)
+	print(z)
+
+test2()
