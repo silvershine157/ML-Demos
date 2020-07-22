@@ -249,8 +249,8 @@ class DiagPosScaling(Flow):
 		res: [B]
 		'''
 		B = x.size(0)
-		ldj = torch.sum(self.params, dim=1).item()
-		res = torch.full((B,), fill_value=ldj, device=device)
+		ldj = torch.sum(self.params, dim=1)
+		res = ldj.expand((B,))
 		return res
 
 def image_to_evenodd(x2d):
@@ -292,6 +292,7 @@ def log_pdf_logistic(z):
 	---
 	res: [B]
 	'''
+	z = torch.clamp(z, -10., 10.) # avoid exp -> inf
 	elewise = -torch.log(1.0+torch.exp(z))-torch.log(1.0+torch.exp(-z))
 	res = elewise.sum(dim=1)
 	return res
@@ -314,9 +315,10 @@ def test3():
 	])
 	ds = torchvision.datasets.MNIST('./data', download=True, transform=transform)
 	B = 128
-	optimizer = torch.optim.Adam(flow.parameters(), lr=0.00001)
+	optimizer = torch.optim.Adam(flow.parameters(), lr=0.001, betas=(0.9, 0.99), eps=1e-4, weight_decay=0.001)
 	loader = DataLoader(ds, batch_size=B)
 	flow.to(device)
+	#flow.load_state_dict(torch.load('data/state_dict/sd_8'))
 	flow.train()
 	n_epochs = 1000
 	for epoch in range(1, n_epochs+1):
@@ -325,6 +327,8 @@ def test3():
 		for batch in loader:
 			x2d, _ = batch # [B, 1, 28, 28]
 			B = x2d.size(0)
+			noise = (1.0/256)*torch.rand(x2d.shape)
+			x2d = x2d + noise
 			optimizer.zero_grad()
 			x2d = x2d.to(device)
 			x_flat = image_to_evenodd(x2d)
@@ -333,10 +337,17 @@ def test3():
 			log_p_z = log_pdf_logistic(z)
 			log_p_x = log_p_z + log_det_jac # change of variables
 			loss = -log_p_x.mean() # minimize NLL
+			if torch.isinf(loss):
+				print("Got infinity!")
+				torch.save(flow.state_dict(), 'data/bad_sd')
+				torch.save(x2d, 'data/bad_x2d')
+				return
 			loss.backward()
+			#grad_norm = nn.utils.clip_grad_norm_(flow.parameters(), 100.0)
 			optimizer.step()
 			running_n += B
 			running_loss += B*loss.item()
+			#print("loss: {:g}, grad_norm: {:g}".format(loss.item(), grad_norm))
 		avg_log_p_x = -(running_loss/running_n)
 		print('Epoch {:d} avg log p(x): {:g}'.format(epoch, avg_log_p_x))
 		torch.save(flow.state_dict(), 'data/state_dict/sd_{:d}'.format(epoch))
@@ -345,11 +356,11 @@ def test3():
 def test4():
 	full_dim = 28*28
 	flow = make_nice(full_dim)
-	flow.load_state_dict(torch.load('data/state_dict/sd_13'))
+	flow.load_state_dict(torch.load('data/state_dict/sd_latest'))
 	flow.to(device)
 	flow.eval()
 	with torch.no_grad():
-		for _ in range(1):
+		for _ in range(10):
 			z = torch.randn((1, full_dim), device=device)
 			x_flat = flow.f_inv(z)
 			log_p_z = log_pdf_logistic(z)
@@ -363,4 +374,21 @@ def test4():
 			plt.imshow(sample)
 			plt.show()
 
-test3()
+def test5():
+	full_dim = 28*28
+	flow = make_nice(full_dim).to(device)
+	flow.load_state_dict(torch.load('data/bad_sd'))
+	x2d = torch.load('data/bad_x2d').to(device)
+	print(x2d.shape)
+	zero_inp = torch.zeros(x2d.shape, device=device)
+	x_flat = image_to_evenodd(x2d)
+	z = flow.f(x_flat)
+	log_p_z = log_pdf_logistic(z)
+	ldj = flow.log_det_jac(x_flat)
+	print(ldj)
+	print(log_p_z)
+	print(z.max())
+	print(z.min())
+	pass
+
+test4()
