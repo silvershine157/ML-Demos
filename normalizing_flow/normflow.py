@@ -83,17 +83,20 @@ class CompositeFlow(Flow):
 			x = self.subflows[i].f(x)
 		return res
 
-class CouplingLayer1D(Flow):
+class AffineCoupling1D(Flow):
 	def __init__(self, full_dim, change_first):
-		super(CouplingLayer1D, self).__init__()
+		super(AffineCoupling1D, self).__init__()
 		self.change_first = change_first
 		self.half_dim = full_dim//2
-		hidden_dim = 200
+		hidden_dim = 1000
 		self.net = nn.Sequential(
 			nn.Linear(self.half_dim, hidden_dim),
 			nn.ReLU(),
+			nn.Linear(hidden_dim, hidden_dim),
+			nn.ReLU(),	
 			nn.Linear(hidden_dim, full_dim)
 		)
+		self.log_scale_clamp = 5.0
 
 	def f(self, x):
 		'''
@@ -107,6 +110,7 @@ class CouplingLayer1D(Flow):
 			net_input = x[:, :self.half_dim] # input first half
 		net_out = self.net(net_input)
 		log_scale = net_out[:, :self.half_dim]
+		log_scale = torch.clamp(log_scale, -self.log_scale_clamp, self.log_scale_clamp) # avoid exp -> inf
 		bias = net_out[:, self.half_dim:]
 		if self.change_first:
 			modified = torch.exp(log_scale) * x[:, :self.half_dim] + bias
@@ -128,6 +132,7 @@ class CouplingLayer1D(Flow):
 			net_input = z[:, :self.half_dim] # input first half (unchanged)
 		net_out = self.net(net_input)
 		log_scale = net_out[:, :self.half_dim]
+		log_scale = torch.clamp(log_scale, -self.log_scale_clamp, self.log_scale_clamp) # avoid exp -> inf
 		bias = net_out[:, self.half_dim:]
 		if self.change_first:
 			modified = torch.exp(-log_scale) * (z[:, :self.half_dim] - bias)
@@ -149,6 +154,7 @@ class CouplingLayer1D(Flow):
 			net_input = x[:, :self.half_dim] # input first half
 		net_out = self.net(net_input)
 		log_scale = net_out[:, :self.half_dim]
+		log_scale = torch.clamp(log_scale, -self.log_scale_clamp, self.log_scale_clamp) # avoid exp -> inf
 		res = log_scale.sum(dim=1) # log(det(diag(exp(ls))))=log(prod(exp(ls)))=sum(log(exp(ls)))=sum(ls)
 		return res
 
@@ -307,15 +313,29 @@ def make_nice(full_dim):
 	])
 	return flow
 
+def make_affine(full_dim):
+	flow = CompositeFlow([
+		AffineCoupling1D(full_dim, True),
+		AffineCoupling1D(full_dim, False),
+		AffineCoupling1D(full_dim, True),
+		AffineCoupling1D(full_dim, False),
+		AffineCoupling1D(full_dim, True),
+		AffineCoupling1D(full_dim, False),
+		AffineCoupling1D(full_dim, True),
+		AffineCoupling1D(full_dim, False),
+		DiagPosScaling(full_dim)
+	])
+	return flow
+
 def test3():
 	full_dim = 28*28
-	flow = make_nice(full_dim)
+	flow = make_affine(full_dim)
 	transform = torchvision.transforms.Compose([
 		torchvision.transforms.ToTensor()
 	])
 	ds = torchvision.datasets.MNIST('./data', download=True, transform=transform)
-	B = 128
-	optimizer = torch.optim.Adam(flow.parameters(), lr=0.001, betas=(0.9, 0.99), eps=1e-4, weight_decay=0.001)
+	B = 32
+	optimizer = torch.optim.Adam(flow.parameters(), lr=0.00001)
 	loader = DataLoader(ds, batch_size=B)
 	flow.to(device)
 	#flow.load_state_dict(torch.load('data/state_dict/sd_8'))
@@ -342,12 +362,17 @@ def test3():
 				torch.save(flow.state_dict(), 'data/bad_sd')
 				torch.save(x2d, 'data/bad_x2d')
 				return
+			if torch.isnan(loss):
+				print("Got Nan!")
+				torch.save(flow.state_dict(), 'data/bad_sd')
+				torch.save(x2d, 'data/bad_x2d')
+				return
 			loss.backward()
-			#grad_norm = nn.utils.clip_grad_norm_(flow.parameters(), 100.0)
+			grad_norm = nn.utils.clip_grad_norm_(flow.parameters(), 10.0)
 			optimizer.step()
 			running_n += B
 			running_loss += B*loss.item()
-			#print("loss: {:g}, grad_norm: {:g}".format(loss.item(), grad_norm))
+			print("loss: {:g}, grad_norm: {:g}".format(loss.item(), grad_norm))
 		avg_log_p_x = -(running_loss/running_n)
 		print('Epoch {:d} avg log p(x): {:g}'.format(epoch, avg_log_p_x))
 		torch.save(flow.state_dict(), 'data/state_dict/sd_{:d}'.format(epoch))
@@ -355,7 +380,7 @@ def test3():
 
 def test4():
 	full_dim = 28*28
-	flow = make_nice(full_dim)
+	flow = make_affine(full_dim)
 	flow.load_state_dict(torch.load('data/state_dict/sd_latest'))
 	flow.to(device)
 	flow.eval()
@@ -376,7 +401,7 @@ def test4():
 
 def test5():
 	full_dim = 28*28
-	flow = make_nice(full_dim).to(device)
+	flow = make_affine(full_dim).to(device)
 	flow.load_state_dict(torch.load('data/bad_sd'))
 	x2d = torch.load('data/bad_x2d').to(device)
 	print(x2d.shape)
@@ -385,6 +410,7 @@ def test5():
 	z = flow.f(x_flat)
 	log_p_z = log_pdf_logistic(z)
 	ldj = flow.log_det_jac(x_flat)
+	print(z)
 	print(ldj)
 	print(log_p_z)
 	print(z.max())
