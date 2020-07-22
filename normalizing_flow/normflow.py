@@ -11,7 +11,8 @@ f: x -> z
 f_inv: z -> x
 '''
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+use_gpu = True
+device = "cuda" if (use_gpu and torch.cuda.is_available()) else "cpu"
 
 class Flow(nn.Module):
 	def __init__(self):
@@ -151,6 +152,104 @@ class CouplingLayer1D(Flow):
 		res = log_scale.sum(dim=1) # log(det(diag(exp(ls))))=log(prod(exp(ls)))=sum(log(exp(ls)))=sum(ls)
 		return res
 
+
+class AdditiveCoupling1D(Flow):
+	def __init__(self, full_dim, change_first):
+		super(AdditiveCoupling1D, self).__init__()
+		self.change_first = change_first
+		self.half_dim = full_dim//2
+		hidden_dim = 1000
+		self.net = nn.Sequential(
+			nn.Linear(self.half_dim, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, hidden_dim),
+			nn.ReLU(),
+			nn.Linear(hidden_dim, hidden_dim),
+			nn.ReLU(),	
+			nn.Linear(hidden_dim, self.half_dim)
+		)
+
+	def f(self, x):
+		'''
+		x: [B, full_dim]
+		---
+		z: [B, full_dim]
+		'''
+		if self.change_first:
+			net_input = x[:, self.half_dim:] # input second half
+		else:
+			net_input = x[:, :self.half_dim] # input first half
+		net_out = self.net(net_input)
+		if self.change_first:
+			modified = x[:, :self.half_dim] + net_out
+			z = torch.cat([modified, net_input], dim=1)
+		else:
+			modified = x[:, self.half_dim:] + net_out
+			z = torch.cat([net_input, modified], dim=1)
+		return z
+
+	def f_inv(self, z):
+		'''
+		z: [B, full_dim]
+		---
+		x: [B, full_dim]
+		'''
+		if self.change_first:
+			net_input = z[:, self.half_dim:] # input second half (unchanged)
+		else:
+			net_input = z[:, :self.half_dim] # input first half (unchanged)
+		net_out = self.net(net_input)
+		if self.change_first:
+			modified = z[:, :self.half_dim] - net_out
+			x = torch.cat([modified, net_input], dim=1)
+		else:
+			modified = z[:, self.half_dim:] - net_out
+			x = torch.cat([net_input, modified], dim=1)
+		return x
+
+	def log_det_jac(self, x):
+		'''
+		x: [B, full_dim]
+		---
+		res: [B]
+		'''
+		B = x.size(0)
+		res = torch.zeros(B, device=device)
+		return res
+
+def image_to_evenodd(x2d):
+	'''
+	x2d: [B, 1, S, S]
+	---
+	x_flat: [B, S*S] (even/odd positions in first/second halves)
+	'''
+	B, _, S, _ = x2d.shape
+	sep = x2d.view(B, S*S//2, 2)
+	x_flat = torch.cat([sep[:, :, 0], sep[:, :, 1]], dim=1)
+	return x_flat
+
+def evenodd_to_image(x_flat):
+	'''
+	x_flat: [B, S*S] (even/odd positions in first/second halves)
+	---
+	x2d: [B, 1, S, S]
+	'''
+	B, Ssq = x_flat.shape
+	S = int(np.sqrt(Ssq)+1e-3)
+	sep = torch.stack([x_flat[:, :Ssq//2], x_flat[:, Ssq//2:]], dim=2)
+	x2d = sep.view((B, 1, S, S))
+	return x2d
+
+def make_alternating_coupling(full_dim, depth=3):
+	flows = []
+	for _ in range(depth):
+		flows.append(CouplingLayer1D(full_dim, True))
+		flows.append(CouplingLayer1D(full_dim, False))
+	flow = CompositeFlow(flows)
+	return flow
+
 def log_pdf_unitnormal(z):
 	'''
 	z: [B, D]
@@ -190,14 +289,7 @@ def test2():
 
 def test3():
 	full_dim = 28*28
-	flow = CompositeFlow([
-		CouplingLayer1D(full_dim, True),
-		CouplingLayer1D(full_dim, False),
-		CouplingLayer1D(full_dim, True),
-		CouplingLayer1D(full_dim, False),
-		CouplingLayer1D(full_dim, True),
-		CouplingLayer1D(full_dim, False),
-	])
+	flow = make_alternating_coupling(full_dim, depth=1)
 	transform = torchvision.transforms.Compose([
 		torchvision.transforms.ToTensor()
 	])
@@ -232,24 +324,31 @@ def test3():
 
 def test4():
 	full_dim = 28*28
-	flow = CompositeFlow([
-		CouplingLayer1D(full_dim, True),
-		CouplingLayer1D(full_dim, False),
-		CouplingLayer1D(full_dim, True),
-		CouplingLayer1D(full_dim, False),
-		CouplingLayer1D(full_dim, True),
-		CouplingLayer1D(full_dim, False),
-	])
-	flow.load_state_dict(torch.load('data/state_dict/sd_10'))
+	flow = make_alternating_coupling(full_dim, depth=1)
+	flow.load_state_dict(torch.load('data/state_dict/sd_13'))
 	flow.to(device)
 	flow.eval()
 	with torch.no_grad():
-		for _ in range(10):
+		for _ in range(1):
 			z = torch.randn((1, full_dim), device=device)
 			x_flat = flow.f_inv(z)
+			log_p_z = log_pdf_unitnormal(z)
+			print(log_p_z)
+			z_recon = flow.f(x_flat)
+			print(torch.sum(torch.abs(z_recon-z)))
+			log_det_jac = flow.log_det_jac(x_flat)
+			print(log_det_jac)
 			x2d = x_flat.view((1, 1, 28, 28))
 			sample = x2d[0, 0, :, :].cpu().numpy()
 			plt.imshow(sample)
 			plt.show()
 
-test4()
+def test5():
+	x2d = torch.randn((3, 1, 28, 28))
+	x_flat = image_to_evenodd(x2d)
+	x2d_recon = evenodd_to_image(x_flat)
+	print(x2d_recon.shape)
+	print(torch.mean(torch.abs(x2d - x2d_recon)))
+	pass
+
+test5()
