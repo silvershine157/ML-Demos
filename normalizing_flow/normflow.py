@@ -219,6 +219,40 @@ class AdditiveCoupling1D(Flow):
 		res = torch.zeros(B, device=device)
 		return res
 
+class DiagPosScaling(Flow):
+	def __init__(self, full_dim):
+		super(DiagPosScaling, self).__init__()
+		self.params = nn.Parameter(torch.zeros(1, full_dim))
+
+	def f(self, x):
+		'''
+		x: [B, full_dim]
+		---
+		z: [B, full_dim]
+		'''
+		z = torch.exp(self.params)*x
+		return z
+
+	def f_inv(self, z):
+		'''
+		z: [B, full_dim]
+		---
+		x: [B, full_dim]
+		'''
+		x = torch.exp(-self.params)*z
+		return x
+
+	def log_det_jac(self, x):
+		'''
+		x: [B, full_dim]
+		---
+		res: [B]
+		'''
+		B = x.size(0)
+		ldj = torch.sum(self.params, dim=1).item()
+		res = torch.full((B,), fill_value=ldj, device=device)
+		return res
+
 def image_to_evenodd(x2d):
 	'''
 	x2d: [B, 1, S, S]
@@ -242,14 +276,6 @@ def evenodd_to_image(x_flat):
 	x2d = sep.view((B, 1, S, S))
 	return x2d
 
-def make_alternating_coupling(full_dim, depth=3):
-	flows = []
-	for _ in range(depth):
-		flows.append(CouplingLayer1D(full_dim, True))
-		flows.append(CouplingLayer1D(full_dim, False))
-	flow = CompositeFlow(flows)
-	return flow
-
 def log_pdf_unitnormal(z):
 	'''
 	z: [B, D]
@@ -260,36 +286,29 @@ def log_pdf_unitnormal(z):
 	res = elewise.sum(dim=1)
 	return res
 
-def test1():
-	flows = [IdentityFlow() for _ in range(5)]
-	cflow = CompositeFlow(flows)
-	x = torch.randn((1, 5))
-	print(x)
-	z = cflow.f(x)
-	print(z)
-	x_r = cflow.f_inv(z)
-	print(x_r)
-	print(cflow.log_det_jac(z))
+def log_pdf_logistic(z):
+	'''
+	z: [B, D]
+	---
+	res: [B]
+	'''
+	elewise = -torch.log(1.0+torch.exp(z))-torch.log(1.0+torch.exp(-z))
+	res = elewise.sum(dim=1)
+	return res
 
-def test2():
-	B = 2
-	full_dim = 4
-	x = torch.randn((B, full_dim), device=device)
-	flow_1 = CouplingLayer1D(full_dim, True)
-	flow_2 = CouplingLayer1D(full_dim, False)
-	flow = CompositeFlow([flow_1, flow_2])
-	flow.to(device)
-	z = flow.f(x)
-	x_r = flow.f_inv(z)
-	ldj = flow.log_det_jac(x)
-	print(x)
-	print(z)
-	print(x_r)
-	print(ldj)
+def make_nice(full_dim):
+	flow = CompositeFlow([
+		AdditiveCoupling1D(full_dim, True),
+		AdditiveCoupling1D(full_dim, False),
+		AdditiveCoupling1D(full_dim, True),
+		AdditiveCoupling1D(full_dim, False),
+		DiagPosScaling(full_dim)
+	])
+	return flow
 
 def test3():
 	full_dim = 28*28
-	flow = make_alternating_coupling(full_dim, depth=1)
+	flow = make_nice(full_dim)
 	transform = torchvision.transforms.Compose([
 		torchvision.transforms.ToTensor()
 	])
@@ -307,10 +326,11 @@ def test3():
 			x2d, _ = batch # [B, 1, 28, 28]
 			B = x2d.size(0)
 			optimizer.zero_grad()
-			x_flat = x2d.view(B, -1).to(device)
+			x2d = x2d.to(device)
+			x_flat = image_to_evenodd(x2d)
 			log_det_jac = flow.log_det_jac(x_flat)
 			z = flow.f(x_flat) # TODO: factor out redundant computation
-			log_p_z = log_pdf_unitnormal(z)
+			log_p_z = log_pdf_logistic(z)
 			log_p_x = log_p_z + log_det_jac # change of variables
 			loss = -log_p_x.mean() # minimize NLL
 			loss.backward()
@@ -324,7 +344,7 @@ def test3():
 
 def test4():
 	full_dim = 28*28
-	flow = make_alternating_coupling(full_dim, depth=1)
+	flow = make_nice(full_dim)
 	flow.load_state_dict(torch.load('data/state_dict/sd_13'))
 	flow.to(device)
 	flow.eval()
@@ -332,23 +352,15 @@ def test4():
 		for _ in range(1):
 			z = torch.randn((1, full_dim), device=device)
 			x_flat = flow.f_inv(z)
-			log_p_z = log_pdf_unitnormal(z)
+			log_p_z = log_pdf_logistic(z)
 			print(log_p_z)
 			z_recon = flow.f(x_flat)
 			print(torch.sum(torch.abs(z_recon-z)))
 			log_det_jac = flow.log_det_jac(x_flat)
 			print(log_det_jac)
-			x2d = x_flat.view((1, 1, 28, 28))
+			x2d = evenodd_to_image(x_flat)
 			sample = x2d[0, 0, :, :].cpu().numpy()
 			plt.imshow(sample)
 			plt.show()
 
-def test5():
-	x2d = torch.randn((3, 1, 28, 28))
-	x_flat = image_to_evenodd(x2d)
-	x2d_recon = evenodd_to_image(x_flat)
-	print(x2d_recon.shape)
-	print(torch.mean(torch.abs(x2d - x2d_recon)))
-	pass
-
-test5()
+test3()
