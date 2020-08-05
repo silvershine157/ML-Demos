@@ -3,6 +3,8 @@ import torch.nn as nn
 import numpy as np
 from scipy.stats import special_ortho_group
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class CouplingNN(nn.Module):
 
 	def __init__(self, C_half):
@@ -90,7 +92,7 @@ class Glow(nn.Module):
 		'''
 		B, C, _, _ = x.shape
 		h = squeeze(x)
-		current_ldj = torch.zeros((B))
+		current_ldj = torch.zeros((B), device=device)
 		for k in range(self.K):
 			h, step_ldj = self.flow_steps[k].forward_flow(h)
 			current_ldj += step_ldj
@@ -125,14 +127,3 @@ def log_pdf_unitnormal(z):
 	elewise = -0.5*z**2 - 0.5*np.log(2*np.pi)
 	res = elewise.sum(dim=1)
 	return res
-
-def test1():
-	C = 1
-	K = 4
-	L = 3
-	glow = Glow(K, L, C)
-	x = torch.randn((3, 1, 16, 16))
-	LL = glow.log_likelihood(x)
-	print(LL.shape)
-
-test1()
