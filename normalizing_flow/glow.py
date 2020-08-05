@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+from scipy.stats import special_ortho_group
 
 class CouplingNN(nn.Module):
 
@@ -28,11 +28,12 @@ class StepOfFlow(nn.Module):
 
 	def __init__(self, C):
 		super(StepOfFlow, self).__init__()
+		self.actnorm_scale = nn.Parameter(torch.ones([1, C, 1, 1]))
+		self.actnorm_bias = nn.Parameter(torch.zeros([1, C, 1, 1]))
+		W = torch.Tensor(special_ortho_group.rvs(C)) # random C-dim rotation matrix
+		self.invertible_1x1_conv_W = nn.Parameter(W)
 		assert C%2 == 0
 		self.coupling_nn = CouplingNN(C//2)
-		self.actnorm_scale = nn.Parameter(torch.randn([1, C, 1, 1]))
-		self.actnorm_bias = nn.Parameter(torch.randn([1, C, 1, 1]))
-		self.invertible_1x1_conv_W = nn.Parameter(torch.randn([C, C]))
 
 	def forward_flow(self, h_in):
 		'''
@@ -95,7 +96,6 @@ class Glow(nn.Module):
 		'''
 		pass
 
-
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -111,6 +111,6 @@ def test1():
 	L = 3
 	glow = Glow(K, L, C)
 	print(get_n_params(glow))
-	pass
+
 
 test1()
