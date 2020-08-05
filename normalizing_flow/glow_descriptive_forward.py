@@ -45,7 +45,7 @@ def invertible_1x1_conv(h_in):
 	'''
 	_, C, _, _ = h_in.shape
 	W = torch.randn(C, C) # param
-	h_out = torch.einsum('ij,bihw->bjhw', W, h_in)
+	h_out = torch.einsum('ji,bihw->bjhw', W, h_in)
 	return h_out
 
 def actnorm(h_in):
