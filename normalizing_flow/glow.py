@@ -85,6 +85,22 @@ def squeeze(h_in):
 	h_out = temp.contiguous().view(B, 4*C, S//2, S//2)
 	return h_out
 
+def unsqueeze(h_out):
+	'''
+	h_out: [B, 4*C, S//2, S//2]
+	---
+	h_in: [B, C, S, S]
+	'''
+	B, C_x4, S_half, _ = h_out.shape
+	C = C_x4//4
+	S = 2*S_half
+	temp = h_out.view(B, C, 2, 2, S_half, S_half)
+	temp = temp.transpose(3, 4)
+	temp = temp.transpose(4, 5)
+	temp = temp.transpose(2, 3) # [B, C, S//2, 2, S//2, 2]
+	h_in = temp.contiguous().view(B, C, S, S)
+	return h_in
+
 class Glow(nn.Module):
 
 	def __init__(self, K, L, C):
@@ -92,6 +108,7 @@ class Glow(nn.Module):
 		self.flow_steps = nn.ModuleList(
 			[StepOfFlow(4*C) for _ in range(K)] # after squeeze (x4)
 		)
+		self.C = C
 		self.K = K
 		if L > 1:
 			self.sub_glow = Glow(K, L-1, C*2) # after split (/2)
@@ -121,6 +138,21 @@ class Glow(nn.Module):
 			z = h.contiguous().view(B, -1)
 			log_det_jac = current_ldj
 		return z, log_det_jac
+
+	def inverse_flow(self, z):
+		'''
+		z: [B, C * S * S]
+		---
+		x: [B, C, S, S]
+		'''
+		B, flat_size = z.shape
+		C = self.C
+		S = int(np.sqrt(flat_size//C)+0.1)
+		h = z.view(B, 4*C, S//2, S//2)
+		for k in range(self.K):
+			h = self.flow_steps[self.K - k - 1].inverse_flow(h)
+		x = unsqueeze(h)
+		return x
 
 	def log_likelihood(self, x):
 		'''

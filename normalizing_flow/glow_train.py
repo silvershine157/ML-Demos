@@ -1,7 +1,7 @@
 import torch
 import torchvision
 
-from glow import Glow, StepOfFlow
+from glow import *
 
 try_gpu = False
 device = torch.device("cuda" if (try_gpu and torch.cuda.is_available()) else "cpu")
@@ -40,14 +40,17 @@ def test1():
 
 
 def test2():
-	B = 1
-	S = 4
-	C = 2
-	flow = StepOfFlow(C)
+	B = 3
+	S = 8
+	C = 3
+	L = 1
+	K = 2
+	flow = Glow(K, L, C)
 	x = torch.randn((B, C, S, S)) # dummy input
 	z, _ = flow.forward_flow(x)
 	x_r = flow.inverse_flow(z)
 	print(torch.mean(torch.abs(x - x_r)))
+
 
 
 test2()
