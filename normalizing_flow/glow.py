@@ -55,6 +55,21 @@ class StepOfFlow(nn.Module):
 		log_det_jac = ldj_actnorm + ldj_conv # additive coupling is volume preserving
 		return h_out, log_det_jac
 
+	def inverse_flow(self, h_out):
+		'''
+		h_out: [B, C, S, S]
+		---
+		h_in: [B, C, S, S]
+		'''
+		B, C, S, _ = h_out.shape
+		first_half = h_out[:, :C//2, :, :]
+		h_conv = h_out.clone()
+		h_conv[:, C//2:, :, :] -= self.coupling_nn(first_half)
+		inv_W = self.conv_W.inverse()
+		h_actnorm = torch.einsum('ji,bihw->bjhw', inv_W, h_conv)
+		h_in = (h_actnorm - self.actnorm_bias)/self.actnorm_scale
+		return h_in
+
 def squeeze(h_in):
 	'''
 	h_in: [B, C, S, S]
