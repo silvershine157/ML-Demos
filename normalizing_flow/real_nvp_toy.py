@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
-
+import pandas as pd
 
 class AffineCouplingLayer(nn.Module):
 
@@ -160,4 +160,14 @@ def show_data(x):
 	x = x.numpy()
 	plt.scatter(x[:, 0], x[:, 1])
 
-test1()
+
+def test2():
+	N = 300
+	K = 8
+	x = make_data(N).numpy()
+	plt.scatter(x[:, 0], x[:, 1])
+	plt.show()
+	x = pd.DataFrame(x).to_csv('realnvp_toydata.csv', header=False, index=False)
+
+
+test2()

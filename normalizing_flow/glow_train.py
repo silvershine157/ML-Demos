@@ -41,16 +41,15 @@ def test1():
 
 def test2():
 	B = 3
-	S = 8
+	S = 32
 	C = 3
-	L = 1
-	K = 2
+	L = 3
+	K = 4
 	flow = Glow(K, L, C)
 	x = torch.randn((B, C, S, S)) # dummy input
 	z, _ = flow.forward_flow(x)
 	x_r = flow.inverse_flow(z)
 	print(torch.mean(torch.abs(x - x_r)))
-
 
 
 test2()

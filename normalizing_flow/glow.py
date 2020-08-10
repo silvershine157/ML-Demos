@@ -3,7 +3,8 @@ import torch.nn as nn
 import numpy as np
 from scipy.stats import special_ortho_group
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+try_gpu = False
+device = torch.device("cuda" if (try_gpu and torch.cuda.is_available()) else "cpu")
 
 class CouplingNN(nn.Module):
 
@@ -148,7 +149,14 @@ class Glow(nn.Module):
 		B, flat_size = z.shape
 		C = self.C
 		S = int(np.sqrt(flat_size//C)+0.1)
-		h = z.view(B, 4*C, S//2, S//2)
+		if self.sub_glow is not None:
+			current_z = z[:, :flat_size//2]
+			sub_z = z[:, flat_size//2:]
+			x_prop = self.sub_glow.inverse_flow(sub_z)
+			h_first = current_z.view(B, 2*C, S//2, S//2)
+			h = torch.cat([h_first, x_prop], dim=1) # [B, 4*C, S//2, S//2]
+		else:
+			h = z.view(B, 4*C, S//2, S//2)
 		for k in range(self.K):
 			h = self.flow_steps[self.K - k - 1].inverse_flow(h)
 		x = unsqueeze(h)
