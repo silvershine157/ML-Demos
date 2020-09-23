@@ -3,7 +3,7 @@ import argparse
 import time
 import os
 import torch
-from apex.parallel import DistributedDataParallel
+
 
 def main(args):
     args.distributed = False
