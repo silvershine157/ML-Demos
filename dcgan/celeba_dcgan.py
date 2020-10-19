@@ -14,14 +14,14 @@ class Generator(nn.Module):
         self.proj = nn.Linear(d_z, 3*3*d_z)
         self.conv_trans = nn.Sequential(
             nn.ConvTranspose2d(d_z, 128, 3, 2),
-            nn.ReLU(),
             nn.BatchNorm2d(128),
+            nn.ReLU(),
             nn.ConvTranspose2d(128, 64, 3, 2),
-            nn.ReLU(),
             nn.BatchNorm2d(64),
-            nn.ConvTranspose2d(64, 32, 3, 2),
             nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 3, 2),
             nn.BatchNorm2d(32),
+            nn.ReLU(),
             nn.ConvTranspose2d(32, 3, 4, 2),
         )
 
@@ -54,12 +54,12 @@ class Discriminator(nn.Module):
         out = self.out_layers(conv_out.mean(dim=[2, 3]))
         return out
 
-def test():
+def train():
 
     dataroot='../../data/celeba/'
     image_size = 64
     batch_size = 256
-    d_z = 10
+    d_z = 32
     ds = ImageFolder(
         root=dataroot,
         transform=transforms.Compose([
@@ -73,7 +73,7 @@ def test():
     gen = Generator(d_z).to(device)
     disc = Discriminator().to(device)
     loader = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
-    gen_opt = torch.optim.Adam(gen.parameters(), lr=1e-3)
+    gen_opt = torch.optim.Adam(gen.parameters(), lr=1e-4)
     disc_opt = torch.optim.Adam(disc.parameters(), lr=1e-4)
 
     iter_cnt = 0
@@ -134,4 +134,5 @@ def test():
                 torch.save(ckpt,fname)
                 print("saved to ", fname)
 
-test()
+if __name__=='__main__':
+    train()
