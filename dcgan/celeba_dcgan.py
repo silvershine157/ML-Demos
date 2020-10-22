@@ -8,9 +8,73 @@ import torch.nn as nn
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+nc = 3 # number of channels, RGB
+ngf = 64 # number of generator filters
+ndf = 64 #number of discriminator filters
+
 class Generator(nn.Module):
-    def __init__(self, d_z):
+    def __init__(self, nz):
         super(Generator, self).__init__()
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(ngf * 8),
+            nn.ReLU(True),
+            # state size. (ngf*8) x 4 x 4
+            nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 8 x 8
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 2),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf),
+            nn.ReLU(True),
+            # state size. (ngf) x 32 x 32
+            nn.ConvTranspose2d(ngf, nc, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. (nc) x 64 x 64
+        )
+
+    def forward(self, inp):
+        inp = inp.unsqueeze(2).unsqueeze(3)
+        output = self.main(inp)
+        return output
+
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        self.main = nn.Sequential(
+            # input is (nc) x 64 x 64
+            nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf) x 32 x 32
+            nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*2) x 16 x 16
+            nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*4) x 8 x 8
+            nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*8) x 4 x 4
+            nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, input):
+        output = self.main(input)
+        return output.view(-1, 1)
+
+
+class Generator0(nn.Module):
+    def __init__(self, d_z):
+        super(Generator0, self).__init__()
         self.d_z = d_z
         self.proj = nn.Linear(d_z, 4*4*1024)
         self.conv_trans = nn.Sequential(
@@ -32,20 +96,20 @@ class Generator(nn.Module):
         conv_trans_out = self.conv_trans(conv_trans_in)
         return conv_trans_out
 
-class Discriminator(nn.Module):
+class Discriminator0(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(3, 128, 5, 2),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(128, 256, 5, 2),
-            nn.BatchNorm2d(256),
+            #nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(256, 512, 5, 2),
-            nn.BatchNorm2d(512),
+            #nn.BatchNorm2d(512),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(512, 1024, 5, 2),
-            nn.BatchNorm2d(1024),
+            #nn.BatchNorm2d(1024),
             nn.LeakyReLU(0.2, inplace=True),
         )
         self.out_layers = nn.Sequential(
@@ -53,7 +117,7 @@ class Discriminator(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x):
+    def forward0(self, x):
         conv_out = self.conv(x)
         out = self.out_layers(conv_out.squeeze(3).squeeze(2))
         return out
@@ -86,7 +150,7 @@ def train():
     running_g_loss = 0.0
     running_d_loss = 0.0
     running_n = 0
-    save_every = 1000
+    save_every = 100
 
     gen.train()
     disc.train()
